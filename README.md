@@ -1,4 +1,4 @@
-![image](/images/yellow.png)
+![image](/images/logo.png)
 
 # Horney Website ⚡️
 
@@ -26,5 +26,5 @@ bun run build
 ### Deploy
 Deploy to GitHub Pages:
 ```sh
-bun run reploy
+bun run deploy
 ```
