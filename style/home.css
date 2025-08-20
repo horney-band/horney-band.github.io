@@ -4,7 +4,7 @@
 }
 
 body{
-    background-image: url('DATES.png');
+    background-image: url('/images/dates.png');
     background-repeat: no-repeat;
     background-size: cover;
     background-position: center;
@@ -19,7 +19,7 @@ header nav ul li a{
     color: #fafafa;
     text-decoration: none;
     font-weight: bold;;
-    
+
 }
 
 /* Garante que o header use posicionamento relativo para ancorar o nav */
@@ -46,10 +46,10 @@ header {
 }
 
 iframe{
-    
+
     margin-left: 60px
 
-   
+
 }
 
 .video{
@@ -59,6 +59,3 @@ iframe{
 .menu :hover{
     color: darkgoldenrod;
 }
-
-
-

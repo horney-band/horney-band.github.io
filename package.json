@@ -1,0 +1,15 @@
+{
+  "name": "horney-band.github.io",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "build": "eleventy",
+    "serve": "eleventy --serve",
+    "predeploy": "bun run build",
+    "deploy": "gh-pages -d _site -b gh-pages"
+  },
+  "devDependencies": {
+    "@11ty/eleventy": "^2.0.1",
+    "gh-pages": "^6.1.1"
+  }
+}
