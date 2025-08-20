@@ -1,2 +1,2 @@
 # Site-Horney
-Desenvolvimento de site web para banda.
+Desenvolvimento de website para banda.
