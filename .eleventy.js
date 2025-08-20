@@ -1,6 +1,9 @@
 const path = require("path")
 
 module.exports = function (eleventyConfig) {
+  eleventyConfig.addPassthroughCopy("CNAME")
+  eleventyConfig.addPassthroughCopy("style/**/*")
+  eleventyConfig.addPassthroughCopy("images/**/*")
   eleventyConfig.addPassthroughCopy("*.png")
   eleventyConfig.addPassthroughCopy("*.jpg")
   eleventyConfig.addPassthroughCopy("*.jpeg")
@@ -11,18 +14,14 @@ module.exports = function (eleventyConfig) {
   eleventyConfig.addPassthroughCopy("*.mp4")
   eleventyConfig.addPassthroughCopy("*.mp3")
   eleventyConfig.addPassthroughCopy("*.css")
-  eleventyConfig.addPassthroughCopy("CNAME")
-  eleventyConfig.addPassthroughCopy("style/**/*")
-  eleventyConfig.addPassthroughCopy("images/**/*")
 
-  // Custom permalink for pages directory - route pages/name.html to /name/
   eleventyConfig.addGlobalData("permalink", () => {
     return (data) => {
       if (data.page.inputPath.startsWith("./pages/")) {
         const basename = path.basename(data.page.inputPath, ".html")
         return `/${basename}/index.html`
       }
-      return false
+      return undefined
     }
   })
 

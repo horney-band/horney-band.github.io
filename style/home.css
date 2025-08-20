@@ -1,61 +1,238 @@
 * {
-    margin: 0;
-    padding: 0;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
 }
 
-body{
-    background-image: url('/images/dates.png');
-    background-repeat: no-repeat;
-    background-size: cover;
-    background-position: center;
+body {
+  background-image: url("/images/dates.png");
+  background-repeat: repeat;
+  background-size: cover;
+  background-position: center;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  min-height: 100vh;
+  font-family: Arial, sans-serif;
 }
 
-header nav ul li{
-    display: inline;
-    margin-right: 40px;
+#background-video {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  min-width: 100vw;
+  min-height: 100vh;
+  width: auto;
+  height: auto;
+  z-index: -1;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  object-fit: cover;
 }
 
-header nav ul li a{
-    color: #fafafa;
-    text-decoration: none;
-    font-weight: bold;;
-
-}
-
-/* Garante que o header use posicionamento relativo para ancorar o nav */
 header {
-    position: relative;
+  position: relative;
+  z-index: 1;
+  background: rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(2px);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  padding: 15px 30px;
 }
 
-/* Posiciona o menu no canto superior direito */
+.logo {
+  flex-shrink: 0;
+}
+
+.logo img {
+  width: 300px;
+  height: auto;
+  max-width: 100%;
+}
+
 .menu {
-    position: absolute;
-    font-size: 25px;
-    top: 120px;
-    right: 30px;
-    padding: 10px; /* espaçamento opcional */
+  position: static;
+  font-size: 25px;
+  padding: 10px;
 }
 
-/* Deixa os links alinhados lado a lado */
-.menu a {
-    text-decoration: none;
-    font-style: italic;
-    margin-left: 15px;
-    color: white; /* ou a cor que preferir */
-    font-weight: bold;
+.menu ul {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 15px;
 }
 
-iframe{
-
-    margin-left: 60px
-
-
+.menu ul li {
+  display: inline;
 }
 
-.video{
-    border: 5px solid #ffffff;;
+.menu ul li a {
+  color: #fafafa;
+  text-decoration: none;
+  font-weight: bold;
+  font-style: italic;
+  transition: color 0.3s ease;
 }
 
-.menu :hover{
-    color: darkgoldenrod;
+.menu a:hover {
+  color: darkgoldenrod;
+}
+
+main {
+  position: relative;
+  z-index: 1;
+  min-height: 50vh;
+  padding: 20px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.video-container {
+  position: relative;
+  width: 100%;
+  max-width: 560px;
+  margin: 0 auto;
+}
+
+.video {
+  border: 1px solid #ffffff;
+  height: auto;
+  aspect-ratio: 16/9;
+}
+
+footer {
+  position: relative;
+  z-index: 1;
+  background: rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(2px);
+  padding: 15px 30px;
+}
+
+.social-links {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.social-links a {
+  display: inline-block;
+}
+
+.social-links img {
+  width: 80px;
+  height: auto;
+  transition: transform 0.3s ease;
+}
+
+.social-links img.small-icon {
+  padding: 15px;
+}
+
+.social-links img:hover {
+  transform: scale(1.1);
+}
+
+/* Tablet styles */
+@media screen and (max-width: 768px) {
+  header {
+    flex-direction: column;
+    text-align: center;
+    padding: 15px 20px;
+  }
+
+  .logo img {
+    width: 250px;
+    margin-bottom: 15px;
+  }
+
+  .menu {
+    font-size: 20px;
+    width: 100%;
+  }
+
+  .menu ul {
+    justify-content: center;
+    gap: 10px;
+  }
+
+  main {
+    padding: 15px;
+  }
+
+  .video-container {
+    max-width: 100%;
+  }
+
+  footer {
+    padding: 15px 20px;
+  }
+
+  .social-links {
+    justify-content: center;
+  }
+
+  .social-links img {
+    width: 70px;
+  }
+}
+
+/* Mobile styles */
+@media screen and (max-width: 480px) {
+  header {
+    padding: 10px 15px;
+  }
+
+  .logo img {
+    width: 200px;
+    margin-bottom: 10px;
+  }
+
+  .menu {
+    font-size: 18px;
+  }
+
+  .menu ul {
+    gap: 8px;
+  }
+
+  .menu ul li a {
+    font-size: 16px;
+  }
+
+  main {
+    padding: 10px;
+  }
+
+  footer {
+    padding: 10px 15px;
+  }
+
+  .social-links img {
+    width: 60px;
+  }
+}
+
+/* Large desktop styles */
+@media screen and (min-width: 1200px) {
+  .logo img {
+    width: 350px;
+  }
+
+  .menu {
+    font-size: 28px;
+  }
+
+  .video-container {
+    max-width: 800px;
+  }
+
+  .social-links img {
+    width: 90px;
+  }
 }
