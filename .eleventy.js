@@ -1,0 +1,36 @@
+const path = require("path")
+
+module.exports = function (eleventyConfig) {
+  eleventyConfig.addPassthroughCopy("CNAME")
+  eleventyConfig.addPassthroughCopy("style/**/*")
+  eleventyConfig.addPassthroughCopy("images/**/*")
+  eleventyConfig.addPassthroughCopy("*.png")
+  eleventyConfig.addPassthroughCopy("*.jpg")
+  eleventyConfig.addPassthroughCopy("*.jpeg")
+  eleventyConfig.addPassthroughCopy("*.gif")
+  eleventyConfig.addPassthroughCopy("*.svg")
+  eleventyConfig.addPassthroughCopy("*.webp")
+  eleventyConfig.addPassthroughCopy("*.ico")
+  eleventyConfig.addPassthroughCopy("*.mp4")
+  eleventyConfig.addPassthroughCopy("*.mp3")
+  eleventyConfig.addPassthroughCopy("*.css")
+
+  eleventyConfig.addGlobalData("permalink", () => {
+    return (data) => {
+      if (data.page.inputPath.startsWith("./pages/")) {
+        const basename = path.basename(data.page.inputPath, ".html")
+        return `/${basename}/index.html`
+      }
+      return undefined
+    }
+  })
+
+  return {
+    dir: {
+      input: ".",
+      output: "_site",
+    },
+    htmlTemplateEngine: "njk",
+    markdownTemplateEngine: "njk",
+  }
+}
