@@ -4,6 +4,8 @@ module.exports = function (eleventyConfig) {
   eleventyConfig.addPassthroughCopy("CNAME")
   eleventyConfig.addPassthroughCopy("style/**/*")
   eleventyConfig.addPassthroughCopy("images/**/*")
+  eleventyConfig.addPassthroughCopy("redesign")
+  eleventyConfig.ignores.add("redesign/**")
   eleventyConfig.addPassthroughCopy("*.png")
   eleventyConfig.addPassthroughCopy("*.jpg")
   eleventyConfig.addPassthroughCopy("*.jpeg")

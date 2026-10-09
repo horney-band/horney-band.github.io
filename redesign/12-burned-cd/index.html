@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<!--
+  HORNEY — CONCEPT 12 · BURNED CD-R / WINAMP
+  ==========================================
+  Rationale:
+  In 2003 the way you shared a band you loved was a burned CD-R: Sharpie on the disc, ballpoint
+  tracklist on a scrap of paper in a scratched jewel case, handed over at a show. You'd put it in the
+  drive, Winamp would pop up, the spectrum bars would start jumping, and you'd poke around the disc's
+  data folder for bonus stuff. HORNEY's ANTI-RASO is exactly that kind of record (alt / punk / grunge
+  roots, sung in Portuguese, made in Joinville) — so this concept turns the site into that disc and
+  the 2003 desktop that plays it. The hero is the open jewel case; you drag (or click) the CD-R into
+  the "HORNEY AMP" player, whose playlist is both the real EP (each track wired to Spotify) and the
+  site map: Discografia, Vídeo.avi, SHOWS.txt, a MERCH folder, a Messenger contact list for socials,
+  and a LEIA-ME.nfo with the bio. The chrome is Windows XP / Winamp, redrawn with 2026 craft:
+  ANTI-RASO magenta→electric-blue title bars, the logo's yellow as LCD phosphor, real type, real
+  focus states, and a layout that becomes stacked full-screen sheets on phones.
+
+  Techniques:
+  - Window manager in vanilla JS: pointer-event dragging (clamped to the desktop), z-order focus,
+    minimise / maximise (double-click title bar) / close, native CSS resize, taskbar task buttons,
+    focus return to the opener, Esc to close. At ≤1000px windows become slide-up full-screen sheets
+    with body scroll lock; the player docks into the page flow.
+  - Draggable CD-R (pointer capture, drop-target hit test) + Web Animations API "flight" from the
+    jewel tray into the player's disc slot; click / Enter does the same. Eject flies it back.
+  - Disc rendered in CSS (conic-gradient metal, fixed iridescent sheen, masked spindle hole) with an
+    SVG Sharpie label (Permanent Marker + textPath) that is the only layer that spins.
+  - Spotify iFrame API controller (loaded on first play): real per-track URIs, transport, seek,
+    shuffle, auto-advance, LCD time from playback_update; plain embed fallback if the API fails.
+  - Canvas visualizer (DPR-aware): fake 24-band spectrum with kick/snare/hat envelopes and falling
+    peak caps, plus oscilloscope and off modes (click the display, like the original). It drives a
+    --beat CSS variable that makes the wallpaper breathe. Only animates while actually playing.
+  - YouTube facades (thumbnail → iframe on click; pauses Spotify), show statuses computed from the
+    real date, .ics download for the next show, taskbar clock + calendar popover with show dates,
+    Start menu, XP-style balloon notifications (aria-live), MSN "nudge", shutdown screen.
+  - prefers-reduced-motion: no disc spin / flights / marquee / window animations / beat glow;
+    visualizer draws a single static frame.
+-->
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>HORNEY — ANTI-RASO.iso · burned CD-R</title>
+<meta name="description" content="HORNEY: rock alternativo de Joinville (SC). Ouça o EP ANTI-RASO (2026), veja vídeos, shows, merch e redes — num CD-R gravado em 2003." />
+<meta name="theme-color" content="#0a0a1f" />
+<link rel="icon" type="image/png" href="../assets/eye.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=Caveat:wght@400..700&family=IBM+Plex+Mono:wght@400;600&family=Permanent+Marker&family=VT323&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="style.css" />
+<noscript><style>.win[hidden]{display:flex!important;position:relative!important;inset:auto!important;margin:16px auto}.desktop{height:auto!important;overflow:visible!important}</style></noscript>
+<script defer src="script.js"></script>
+</head>
+<body>
+<a class="skip" href="#win-player">Pular para o player</a>
+
+<main class="desktop" id="desktop">
+  <div class="wall" aria-hidden="true"><div class="wall__glow" id="wall-glow"></div><img class="wall__eye" src="../assets/eye.png" alt="" width="1024" height="1024" /></div>
+  <h1 class="sr-only">HORNEY — banda de rock alternativo de Joinville (SC). EP ANTI-RASO, 2026.</h1>
+
+  <!-- ===== Desktop icons ===== -->
+  <nav class="icons" aria-label="Área de trabalho">
+    <button class="icon" type="button" data-open="win-player">
+      <span class="ico ico--amp" aria-hidden="true"><img src="../assets/eye.png" alt="" width="64" height="64" /></span>
+      <span class="icon__label">HORNEY AMP</span>
+    </button>
+    <button class="icon" type="button" data-open="win-nfo">
+      <span class="ico ico--nfo" aria-hidden="true"><span>NFO</span></span>
+      <span class="icon__label">LEIA-ME.nfo</span>
+    </button>
+    <button class="icon" type="button" data-open="win-disco">
+      <span class="ico ico--folder" aria-hidden="true"><img src="../assets/cover-anti-raso.jpg" alt="" width="64" height="64" /></span>
+      <span class="icon__label">Discografia</span>
+    </button>
+    <button class="icon" type="button" data-open="win-video">
+      <span class="ico ico--video" aria-hidden="true"><img src="../assets/yt-fools-game.jpg" alt="" width="96" height="54" /></span>
+      <span class="icon__label">VÍDEO.avi</span>
+    </button>
+    <button class="icon" type="button" data-open="win-shows">
+      <span class="ico ico--txt" aria-hidden="true"><span></span></span>
+      <span class="icon__label">SHOWS.txt</span>
+    </button>
+    <button class="icon" type="button" data-open="win-merch">
+      <span class="ico ico--folder" aria-hidden="true"><img src="../assets/ig-post-4.jpg" alt="" width="64" height="64" /></span>
+      <span class="icon__label">MERCH</span>
+    </button>
+    <button class="icon" type="button" data-open="win-social">
+      <span class="ico ico--msn" aria-hidden="true"><i></i><i></i></span>
+      <span class="icon__label">Messenger</span>
+    </button>
+    <a class="icon" href="https://ps.algohits.com/horney-anti-raso" target="_blank" rel="noopener">
+      <span class="ico ico--url" aria-hidden="true"><span>⚡</span></span>
+      <span class="icon__label">Pre-save.url</span>
+    </a>
+  </nav>
+
+  <!-- ===== Hero: wallpaper wordmark + open jewel case ===== -->
+  <section class="stage" id="stage" aria-labelledby="stage-title">
+    <div class="stage__brand">
+      <img class="stage__logo" src="../assets/logo-wordmark.png" alt="HORNEY" width="1200" height="519" />
+      <p class="stage__tag" id="stage-title">rock alternativo de Joinville (SC) · EP <b>ANTI-RASO</b> já saiu</p>
+    </div>
+
+    <div class="jewel" id="jewel">
+      <div class="jewel__lid">
+        <div class="jcard">
+          <span class="jcard__tape" aria-hidden="true"></span>
+          <p class="jcard__title">HORNEY — ANTI-RASO</p>
+          <ol class="jcard__list" aria-label="Faixas — toque pra ouvir">
+            <li><button type="button" data-play="0">OFF!</button></li>
+            <li><button type="button" data-play="1">QUEBRA-CABEÇA <small>(c/ Dani Buarque)</small></button></li>
+            <li><button type="button" data-play="2">MERGULHAR</button></li>
+            <li><button type="button" data-play="3">ROMÂNTICA</button></li>
+          </ol>
+          <p class="jcard__extra">+ dados: <button type="button" data-open="win-video">vídeos</button>, <button type="button" data-open="win-shows">shows</button>, <button type="button" data-open="win-merch">merch</button></p>
+          <p class="jcard__sign">não emprestar!!! ⚡😈 <span>30/07/26</span></p>
+        </div>
+      </div>
+      <div class="jewel__hinge" aria-hidden="true"></div>
+      <div class="jewel__tray">
+        <div class="tray__rosette" aria-hidden="true"></div>
+        <p class="tray__note" aria-hidden="true">(tá no player →)</p>
+        <button class="tray__eject" type="button" id="tray-eject" tabindex="-1" aria-label="Devolver o CD pra caixinha">⏏</button>
+        <button class="disc" id="disc" type="button" aria-describedby="disc-hint" aria-label="CD-R HORNEY ANTI-RASO: arraste pro player ou aperte Enter pra tocar">
+          <span class="disc__body" aria-hidden="true"></span>
+          <span class="disc__label" aria-hidden="true">
+            <svg class="disc-svg" viewBox="-100 -100 200 200" focusable="false">
+              <defs>
+                <path id="arc-left" d="M -76.2 44 A 88 88 0 0 1 -76.2 -44" />
+                <path id="arc-right" d="M 76.2 -44 A 88 88 0 0 1 76.2 44" />
+                <path id="arc-hub" d="M -33 0 A 33 33 0 0 1 33 0" />
+              </defs>
+              <text class="t-print"><textPath href="#arc-hub" startOffset="50%" text-anchor="middle">CD-R · 80 MIN · 700 MB</textPath></text>
+              <text class="t-mk" x="2" y="-47" text-anchor="middle" transform="rotate(-7)">HORNEY</text>
+              <path class="t-scribble" d="M -52 -38 q 20 -6 40 -2 t 40 -3 t 22 2" />
+              <text class="t-mk t-mk--sm" x="0" y="66" text-anchor="middle" transform="rotate(-3)">ANTI-RASO</text>
+              <text class="t-pen"><textPath href="#arc-left" startOffset="50%" text-anchor="middle">p/ ouvir ALTO!! ⚡</textPath></text>
+              <text class="t-pen"><textPath href="#arc-right" startOffset="50%" text-anchor="middle">30·07·26 😈</textPath></text>
+            </svg>
+          </span>
+        </button>
+      </div>
+    </div>
+    <p class="stage__hint" id="disc-hint"><span class="hint-desk">arrasta o CD pro player</span><span class="hint-touch">toca no CD pra tocar</span> <span class="hint-arrow" aria-hidden="true">→</span></p>
+  </section>
+
+  <!-- ===== HORNEY AMP (Winamp) ===== -->
+  <section class="win win--amp win--dock" id="win-player" data-title="HORNEY AMP" data-icon="amp" aria-labelledby="t-player" tabindex="-1">
+    <header class="win__bar">
+      <span class="win__ico win__ico--amp" aria-hidden="true"></span>
+      <h2 class="win__title" id="t-player">HORNEY AMP <span>· ANTI-RASO.m3u</span></h2>
+      <div class="win__ctl">
+        <button type="button" data-act="min" aria-label="Minimizar HORNEY AMP"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 9h8" /></svg></button>
+        <button type="button" data-act="close" class="is-close" aria-label="Fechar HORNEY AMP"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 3l6 6M9 3l-6 6" /></svg></button>
+      </div>
+    </header>
+    <div class="amp" id="amp">
+      <div class="amp__lcd">
+        <div class="lcd-l">
+          <div class="slot" aria-hidden="true"><div class="mini-disc" id="mini-disc"></div><span class="slot__empty">NO<br />DISC</span></div>
+          <div class="lcd-l__read">
+            <span class="lcd-state" id="lcd-state">■</span>
+            <span class="lcd-time" id="lcd-time">--:--</span>
+          </div>
+        </div>
+        <div class="lcd-r">
+          <div class="marquee" aria-live="polite"><div class="marquee__track" id="marquee"><span>*** NO DISC *** ARRASTA O CD-R AQUI ***&nbsp;</span><span aria-hidden="true">*** NO DISC *** ARRASTA O CD-R AQUI ***&nbsp;</span></div></div>
+          <div class="lcd-meta"><span><b>320</b> kbps</span><span><b>44</b> kHz</span><span class="led" id="led-stereo">stereo</span><span class="led" id="led-sp">spotify</span></div>
+          <button class="viz-btn" id="viz-btn" type="button" aria-label="Visualizador: espectro. Clique pra trocar o modo"><canvas id="viz" width="300" height="56"></canvas></button>
+        </div>
+      </div>
+      <label class="sr-only" for="seek">Posição da faixa</label>
+      <input class="seek" id="seek" type="range" min="0" max="1000" value="0" step="1" disabled />
+      <div class="amp__transport">
+        <div class="tp" role="group" aria-label="Controles">
+          <button type="button" id="b-prev" aria-label="Faixa anterior"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h2.5v14H6zM20 5v14L9 12z" /></svg></button>
+          <button type="button" id="b-play" class="tp__play" aria-label="Tocar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5v15l12.5-7.5z" /></svg></button>
+          <button type="button" id="b-pause" aria-label="Pausar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h4v14H6zm8 0h4v14h-4z" /></svg></button>
+          <button type="button" id="b-stop" aria-label="Parar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6h12v12H6z" /></svg></button>
+          <button type="button" id="b-next" aria-label="Próxima faixa"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 5H18v14h-2.5zM4 5v14l11-7z" /></svg></button>
+          <button type="button" id="b-eject" aria-label="Ejetar CD"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 16h14v3H5zM12 5l7.5 8.5h-15z" /></svg></button>
+        </div>
+        <div class="tg">
+          <button type="button" id="b-shuffle" class="tg__btn" aria-pressed="false">shuf</button>
+          <button type="button" id="b-pl" class="tg__btn" aria-pressed="true" aria-controls="playlist">pl</button>
+        </div>
+      </div>
+      <div class="amp__sp" id="sp-wrap">
+        <div id="sp-slot" class="sp-slot"><p class="sp-note" id="sp-note">plug-in do Spotify carrega quando o CD entrar ⚡</p></div>
+      </div>
+      <div class="pl" id="playlist">
+        <div class="pl__head"><span>PLAYLIST EDITOR</span><span>ANTI-RASO.m3u</span></div>
+        <ol class="pl__list">
+          <li class="pl__row"><button type="button" class="pl__track" data-track="0"><span class="pl__n">1.</span><span class="pl__t">HORNEY – OFF!</span><span class="pl__d">3:19</span></button><a class="pl__sp" href="https://open.spotify.com/track/7KteAUfbNB4CtxnbMudBad" target="_blank" rel="noopener" aria-label="OFF! no Spotify (abre em nova aba)">↗</a></li>
+          <li class="pl__row"><button type="button" class="pl__track" data-track="1"><span class="pl__n">2.</span><span class="pl__t">HORNEY – QUEBRA-CABEÇA (feat. Dani Buarque)</span><span class="pl__d">4:20</span></button><a class="pl__sp" href="https://open.spotify.com/track/3SYpLwh1ChHyNEOn5TNOWy" target="_blank" rel="noopener" aria-label="QUEBRA-CABEÇA no Spotify (abre em nova aba)">↗</a></li>
+          <li class="pl__row"><button type="button" class="pl__track" data-track="2"><span class="pl__n">3.</span><span class="pl__t">HORNEY – MERGULHAR</span><span class="pl__d">3:44</span></button><a class="pl__sp" href="https://open.spotify.com/track/0aJtgSakI5r87CfAqNdDXP" target="_blank" rel="noopener" aria-label="MERGULHAR no Spotify (abre em nova aba)">↗</a></li>
+          <li class="pl__row"><button type="button" class="pl__track" data-track="3"><span class="pl__n">4.</span><span class="pl__t">HORNEY – ROMÂNTICA</span><span class="pl__d">2:28</span></button><a class="pl__sp" href="https://open.spotify.com/track/2p5r9m60eSDxMGey8GRubR" target="_blank" rel="noopener" aria-label="ROMÂNTICA no Spotify (abre em nova aba)">↗</a></li>
+          <li class="pl__sep" aria-hidden="true">— trilha de dados —</li>
+          <li class="pl__row"><button type="button" class="pl__data" data-open="win-nfo"><span class="pl__n">5.</span><span class="pl__t">LEIA-ME.nfo · quem é a HORNEY</span><span class="pl__d">[NFO]</span></button></li>
+          <li class="pl__row"><button type="button" class="pl__data" data-open="win-disco"><span class="pl__n">6.</span><span class="pl__t">DISCOGRAFIA\</span><span class="pl__d">[DIR]</span></button></li>
+          <li class="pl__row"><button type="button" class="pl__data" data-open="win-video"><span class="pl__n">7.</span><span class="pl__t">VÍDEO.avi · Fool's Game + ao vivo</span><span class="pl__d">[AVI]</span></button></li>
+          <li class="pl__row"><button type="button" class="pl__data" data-open="win-shows"><span class="pl__n">8.</span><span class="pl__t">SHOWS.txt · agenda</span><span class="pl__d">[TXT]</span></button></li>
+          <li class="pl__row"><button type="button" class="pl__data" data-open="win-merch"><span class="pl__n">9.</span><span class="pl__t">MERCH\ · em breve</span><span class="pl__d">[DIR]</span></button></li>
+          <li class="pl__row"><button type="button" class="pl__data" data-open="win-social"><span class="pl__n">10.</span><span class="pl__t">Messenger · redes sociais</span><span class="pl__d">[LNK]</span></button></li>
+        </ol>
+        <div class="pl__foot"><span>4 faixas · 13:53 + 6 arquivos</span><a href="https://open.spotify.com/album/7EM81z5ydGQq04ZbkIE5aS" target="_blank" rel="noopener">EP no Spotify ↗</a></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== LEIA-ME.nfo (bio) ===== -->
+  <section class="win win--nfo" id="win-nfo" data-title="LEIA-ME.nfo" data-icon="nfo" aria-labelledby="t-nfo" tabindex="-1" hidden>
+    <header class="win__bar">
+      <span class="win__ico win__ico--nfo" aria-hidden="true"></span>
+      <h2 class="win__title" id="t-nfo">LEIA-ME.nfo — NFO Viewer</h2>
+      <div class="win__ctl">
+        <button type="button" data-act="min" aria-label="Minimizar"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 9h8" /></svg></button>
+        <button type="button" data-act="max" aria-label="Maximizar"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 2.5h7v7h-7z" /></svg></button>
+        <button type="button" data-act="close" class="is-close" aria-label="Fechar"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 3l6 6M9 3l-6 6" /></svg></button>
+      </div>
+    </header>
+    <div class="win__body nfo">
+      <img class="nfo__logo" src="../assets/logo-wordmark.png" alt="HORNEY" width="1200" height="519" loading="lazy" />
+<pre class="nfo__pre">+============================================+
+|  HORNEY  ·  ANTI-RASO  ·  release 2026     |
++============================================+
+
+ ORIGEM ....... Joinville (SC), Brasil
+ SOM .......... alt / indie rock — punk,
+                hardcore, grunge e uma
+                pitada de MPB
+ FORMAÇÃO ..... quarteto
+   Duda (Eduarda) Maiolini .. voz & letras
+   Rafa Bello ............... composição
+   + 2
+ IDIOMA ....... português, desde 2026
+
+ ── RELEASE ─────────────────────────────────
+ ANTI-RASO · EP ................ 30.07.2026
+   01  OFF!
+   02  QUEBRA-CABEÇA (feat. Dani Buarque)
+   03  MERGULHAR
+   04  ROMÂNTICA
+
+ ── PALAVRA DA DUDA ─────────────────────────
+ <q>ANTI-RASO significa mergulhar fundo nas
+  coisas. É se recusar a viver apenas na
+  superfície.</q>
+
+ <q>A Horney não é uma banda que vai tocar só
+  rock pesado, nem uma banda que vai tocar
+  só música melancólica.</q>
+
+ ── IMPRENSA ────────────────────────────────
+ Unglued ........................ 7.8 / 10
+ <a href="https://www.unglued.com.br/reviews/anti-raso" target="_blank" rel="noopener">» ler a review de ANTI-RASO ↗</a>
+
+ ── NÚMEROS ─────────────────────────────────
+ 7.3K seguidores no IG · 1.8K ouvintes/mês
+
+ greetz: todo mundo que cola nos shows ⚡😈</pre>
+      <div class="nfo__actions">
+        <button type="button" class="btn btn--y" data-play="0">▶ tocar ANTI-RASO</button>
+        <button type="button" class="btn" data-open="win-shows">ver SHOWS.txt</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== DISCOGRAFIA (Explorer) ===== -->
+  <section class="win win--explorer" id="win-disco" data-title="DISCOGRAFIA" data-icon="folder" aria-labelledby="t-disco" tabindex="-1" hidden>
+    <header class="win__bar">
+      <span class="win__ico win__ico--folder" aria-hidden="true"></span>
+      <h2 class="win__title" id="t-disco">DISCOGRAFIA</h2>
+      <div class="win__ctl">
+        <button type="button" data-act="min" aria-label="Minimizar"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 9h8" /></svg></button>
+        <button type="button" data-act="max" aria-label="Maximizar"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 2.5h7v7h-7z" /></svg></button>
+        <button type="button" data-act="close" class="is-close" aria-label="Fechar"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 3l6 6M9 3l-6 6" /></svg></button>
+      </div>
+    </header>
+    <div class="addr" aria-hidden="true"><span>Endereço</span><code>D:\HORNEY\DISCOGRAFIA</code></div>
+    <div class="win__body ex">
+      <aside class="ex__side">
+        <div class="ex__box">
+          <p class="ex__h">Tarefas de música</p>
+          <ul>
+            <li><button type="button" data-play="0">▶ Tocar ANTI-RASO no player</button></li>
+            <li><a href="https://open.spotify.com/artist/5zJVmieIGGEeOKbIrXmhZi" target="_blank" rel="noopener">♫ Artista no Spotify ↗</a></li>
+            <li><a href="https://ps.algohits.com/horney-anti-raso" target="_blank" rel="noopener">⚡ Todos os links ↗</a></li>
+          </ul>
+        </div>
+        <div class="ex__box ex__box--press">
+          <p class="ex__h">Imprensa</p>
+          <p><b class="score">7.8</b>/10 — <a href="https://www.unglued.com.br/reviews/anti-raso" target="_blank" rel="noopener">Unglued sobre ANTI-RASO ↗</a></p>
+        </div>
+      </aside>
+      <div class="ex__main">
+        <ul class="rels" role="list">
+          <li><button type="button" class="rel" data-rel="0" aria-pressed="true"><img src="../assets/cover-anti-raso.jpg" alt="" width="640" height="640" loading="lazy" /><span class="rel__name">ANTI-RASO</span><span class="rel__meta">EP · 2026</span></button></li>
+          <li><button type="button" class="rel" data-rel="1" aria-pressed="false"><img src="../assets/cover-mergulhar.jpg" alt="" width="640" height="640" loading="lazy" /><span class="rel__name">MERGULHAR</span><span class="rel__meta">single · 2026</span></button></li>
+          <li><button type="button" class="rel" data-rel="2" aria-pressed="false"><img src="../assets/cover-off.jpg" alt="" width="640" height="640" loading="lazy" /><span class="rel__name">OFF!</span><span class="rel__meta">single · 2025</span></button></li>
+          <li><button type="button" class="rel" data-rel="3" aria-pressed="false"><img src="../assets/cover-four-rooms.jpg" alt="" width="640" height="640" loading="lazy" /><span class="rel__name">Four Rooms for Four Fools</span><span class="rel__meta">EP · 2022</span></button></li>
+        </ul>
+        <div class="rel-detail" aria-live="polite">
+          <div class="rel-detail__head">
+            <h3 id="rel-title">ANTI-RASO</h3>
+            <p id="rel-meta">EP · lançado em 30 de julho de 2026 · 4 faixas</p>
+            <a id="rel-link" class="btn btn--y" href="https://open.spotify.com/album/7EM81z5ydGQq04ZbkIE5aS" target="_blank" rel="noopener">Abrir no Spotify ↗</a>
+          </div>
+          <div class="rel-embed" id="rel-embed"></div>
+        </div>
+      </div>
+    </div>
+    <div class="status"><span id="disco-status">4 objeto(s) · ANTI-RASO selecionado</span></div>
+  </section>
+
+  <!-- ===== VÍDEO.avi (Media Player) ===== -->
+  <section class="win win--media" id="win-video" data-title="VÍDEO.avi" data-icon="video" aria-labelledby="t-video" tabindex="-1" hidden>
+    <header class="win__bar">
+      <span class="win__ico win__ico--video" aria-hidden="true"></span>
+      <h2 class="win__title" id="t-video">VÍDEO.avi — Media Player</h2>
+      <div class="win__ctl">
+        <button type="button" data-act="min" aria-label="Minimizar"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 9h8" /></svg></button>
+        <button type="button" data-act="max" aria-label="Maximizar"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 2.5h7v7h-7z" /></svg></button>
+        <button type="button" data-act="close" class="is-close" aria-label="Fechar"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 3l6 6M9 3l-6 6" /></svg></button>
+      </div>
+    </header>
+    <div class="win__body media">
+      <div class="media__stage" id="vid-stage"></div>
+      <div class="media__side">
+        <p class="media__h">Lista de reprodução</p>
+        <ul class="media__list" role="list">
+          <li><button type="button" class="vid-item" data-yt="9uP1P11at9M" data-thumb="../assets/yt-fools-game.jpg" data-title="Fool's Game — clipe oficial" data-desc="Clipe oficial (2022), dirigido por Rique Duarte." aria-pressed="true"><img src="../assets/yt-fools-game.jpg" alt="" width="128" height="72" loading="lazy" /><span><b>Fool's Game</b><small>clipe oficial · 2022</small></span></button></li>
+          <li><button type="button" class="vid-item" data-yt="V9Rpgtc2vTs" data-thumb="../assets/yt-live.jpg" data-title="HORNEY ao vivo" data-desc="38 segundos de HORNEY ao vivo. Agora imagina inteiro, na tua frente." aria-pressed="false"><img src="../assets/yt-live.jpg" alt="" width="128" height="72" loading="lazy" /><span><b>Horney Live</b><small>ao vivo · 0:38</small></span></button></li>
+        </ul>
+        <div class="media__info">
+          <p class="media__title" id="vid-title">Fool's Game — clipe oficial</p>
+          <p class="media__desc" id="vid-desc">Clipe oficial (2022), dirigido por Rique Duarte.</p>
+          <a class="btn" href="https://www.youtube.com/@bandaHorney" target="_blank" rel="noopener">canal @bandaHorney ↗</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== SHOWS.txt (Notepad) ===== -->
+  <section class="win win--notepad" id="win-shows" data-title="SHOWS.txt" data-icon="txt" aria-labelledby="t-shows" tabindex="-1" hidden>
+    <header class="win__bar">
+      <span class="win__ico win__ico--txt" aria-hidden="true"></span>
+      <h2 class="win__title" id="t-shows">SHOWS.txt — Bloco de notas</h2>
+      <div class="win__ctl">
+        <button type="button" data-act="min" aria-label="Minimizar"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 9h8" /></svg></button>
+        <button type="button" data-act="max" aria-label="Maximizar"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 2.5h7v7h-7z" /></svg></button>
+        <button type="button" data-act="close" class="is-close" aria-label="Fechar"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 3l6 6M9 3l-6 6" /></svg></button>
+      </div>
+    </header>
+    <div class="menubar" role="group" aria-label="Bloco de notas">
+      <button type="button" id="ics-btn">Salvar .ics</button>
+      <button type="button" id="wrap-btn" aria-pressed="true">Quebra automática</button>
+      <button type="button" id="font-down" aria-label="Diminuir fonte">A−</button>
+      <button type="button" id="font-up" aria-label="Aumentar fonte">A+</button>
+    </div>
+    <div class="win__body notepad" id="notepad">
+      <p class="np-line np-shout">SAI DE CASA E COLE NOS SHOWS!!! ⚡️😈</p>
+      <p class="np-line np-dim">==========================================</p>
+      <ol class="shows" role="list">
+        <li class="show" data-date="2026-09-17">
+          <span class="show__status"></span>
+          <span class="show__date">17 SET 2026 · QUI</span>
+          <span class="show__what">ROCK NIGHT @ FFFront — São Paulo/SP</span>
+          <span class="show__more">c/ Mastrobiso · <button type="button" class="np-link" data-img="../assets/sympla-rock-night.jpg" data-alt="Flyer do Rock Night na FFFront, São Paulo, com HORNEY e Mastrobiso" data-name="rock-night.jpg">ver flyer.jpg</button></span>
+        </li>
+        <li class="show" data-date="2026-10-03">
+          <span class="show__status"></span>
+          <span class="show__date">03 OUT 2026 · SÁB</span>
+          <span class="show__what">show — local não anotado</span>
+        </li>
+        <li class="show show--big" data-date="2026-10-09">
+          <span class="show__status"></span>
+          <span class="show__date">09 OUT 2026 · SEX</span>
+          <span class="show__what">ÚLTIMO SHOW DO ANO!!!</span>
+          <span class="show__more">LOCAL EM BREVE → fica de olho no <a class="np-link" href="https://www.instagram.com/horney.band/" target="_blank" rel="noopener">@horney.band</a></span>
+        </li>
+      </ol>
+      <p class="np-line np-dim">==========================================</p>
+      <p class="np-line">quer HORNEY na tua cidade? chama no <a class="np-link" href="https://ig.me/m/horney.band" target="_blank" rel="noopener">DM</a>.</p>
+      <p class="np-line np-dim">-- fim do arquivo --<span class="caret" aria-hidden="true"></span></p>
+    </div>
+    <div class="status"><span id="shows-status">Ln 1, Col 1</span><span>UTF-8</span></div>
+  </section>
+
+  <!-- ===== MERCH (Explorer, thumbnails) ===== -->
+  <section class="win win--explorer" id="win-merch" data-title="MERCH" data-icon="folder" aria-labelledby="t-merch" tabindex="-1" hidden>
+    <header class="win__bar">
+      <span class="win__ico win__ico--folder" aria-hidden="true"></span>
+      <h2 class="win__title" id="t-merch">MERCH</h2>
+      <div class="win__ctl">
+        <button type="button" data-act="min" aria-label="Minimizar"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 9h8" /></svg></button>
+        <button type="button" data-act="max" aria-label="Maximizar"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 2.5h7v7h-7z" /></svg></button>
+        <button type="button" data-act="close" class="is-close" aria-label="Fechar"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 3l6 6M9 3l-6 6" /></svg></button>
+      </div>
+    </header>
+    <div class="addr" aria-hidden="true"><span>Endereço</span><code>D:\HORNEY\MERCH</code></div>
+    <div class="win__body ex ex--merch">
+      <div class="ex__main">
+        <p class="merch-banner"><b>EM BREVE</b> — nada à venda ainda. Quer garantir o teu? Manda DM que a gente avisa primeiro.</p>
+        <ul class="thumbs" role="list">
+          <li><button type="button" class="thumb" data-item="0" aria-pressed="true">
+            <span class="thumb__art">
+              <svg viewBox="0 0 200 200" aria-hidden="true" focusable="false">
+                <path class="tee" d="M62 22l22-10q16 14 32 0l22 10 40 26-18 32-18-9v115H58V71l-18 9-18-32z" />
+                <path class="tee-collar" d="M84 12q16 14 32 0" />
+                <image href="../assets/cover-anti-raso.jpg" x="72" y="56" width="56" height="56" />
+              </svg>
+            </span>
+            <span class="thumb__name">camiseta_ANTI-RASO.jpg</span><span class="stamp">EM BREVE</span>
+          </button></li>
+          <li><button type="button" class="thumb" data-item="1" aria-pressed="false">
+            <span class="thumb__art">
+              <svg viewBox="0 0 200 200" aria-hidden="true" focusable="false">
+                <path class="tee tee--y" d="M62 22l22-10q16 14 32 0l22 10 40 26-18 32-18-9v115H58V71l-18 9-18-32z" />
+                <path class="tee-collar" d="M84 12q16 14 32 0" />
+                <image href="../assets/eye.png" x="64" y="46" width="72" height="72" style="mix-blend-mode:multiply" />
+              </svg>
+            </span>
+            <span class="thumb__name">camiseta_OLHO.jpg</span><span class="stamp">EM BREVE</span>
+          </button></li>
+          <li><button type="button" class="thumb" data-item="2" aria-pressed="false">
+            <span class="thumb__art">
+              <svg viewBox="0 0 200 200" aria-hidden="true" focusable="false">
+                <path class="bag-handle" d="M72 70V44q0-22 28-22t28 22v26" />
+                <path class="bag" d="M44 66h112l8 124H36z" />
+                <image href="../assets/logo-yellow.png" x="44" y="96" width="112" height="62" preserveAspectRatio="xMidYMid slice" style="mix-blend-mode:multiply" />
+              </svg>
+            </span>
+            <span class="thumb__name">ecobag_HORNEY.jpg</span><span class="stamp">EM BREVE</span>
+          </button></li>
+          <li><button type="button" class="thumb" data-item="3" aria-pressed="false">
+            <span class="thumb__art">
+              <svg viewBox="0 0 200 200" aria-hidden="true" focusable="false">
+                <defs><clipPath id="clip-st1"><circle cx="70" cy="74" r="44" /></clipPath><clipPath id="clip-st3"><rect x="104" y="100" width="72" height="72" rx="8" /></clipPath></defs>
+                <circle class="sticker-edge" cx="70" cy="74" r="48" />
+                <rect x="22" y="26" width="96" height="96" fill="#f2a900" clip-path="url(#clip-st1)" />
+                <image href="../assets/eye.png" x="22" y="26" width="96" height="96" clip-path="url(#clip-st1)" style="mix-blend-mode:multiply" />
+                <g transform="rotate(8 140 136)">
+                  <rect class="sticker-edge" x="100" y="96" width="80" height="80" rx="11" />
+                  <image href="../assets/cover-anti-raso.jpg" x="104" y="100" width="72" height="72" clip-path="url(#clip-st3)" />
+                </g>
+                <g transform="rotate(-10 70 160)">
+                  <rect class="sticker-edge" x="18" y="132" width="110" height="50" rx="10" />
+                  <rect x="22" y="136" width="102" height="42" rx="7" fill="#fff" />
+                  <image href="../assets/logo-yellow.png" x="22" y="136" width="102" height="42" preserveAspectRatio="xMidYMid slice" />
+                </g>
+              </svg>
+            </span>
+            <span class="thumb__name">kit_adesivos.jpg</span><span class="stamp">EM BREVE</span>
+          </button></li>
+        </ul>
+      </div>
+      <aside class="ex__side ex__side--right" aria-live="polite">
+        <div class="ex__box">
+          <p class="ex__h">Detalhes</p>
+          <div class="mi-art" id="mi-art" aria-hidden="true"></div>
+          <h3 class="mi-title" id="mi-title">Camiseta ANTI-RASO</h3>
+          <p class="mi-desc" id="mi-desc">Preta, com a capa do EP no peito: a porta no mar, o olho e o raio.</p>
+          <p class="mi-state"><span class="stamp stamp--inline">EM BREVE</span> sem preço ainda</p>
+          <a class="btn btn--y" href="https://ig.me/m/horney.band" target="_blank" rel="noopener">Quero! manda DM ↗</a>
+          <a class="mi-alt" href="https://www.instagram.com/horney.band/" target="_blank" rel="noopener">ou segue o @horney.band ↗</a>
+        </div>
+      </aside>
+    </div>
+    <div class="status"><span id="merch-status">4 objeto(s) · 0 em estoque (ainda!)</span></div>
+  </section>
+
+  <!-- ===== Messenger (social) ===== -->
+  <section class="win win--msn" id="win-social" data-title="HORNEY Messenger" data-icon="msn" aria-labelledby="t-social" tabindex="-1" hidden>
+    <header class="win__bar">
+      <span class="win__ico win__ico--msn" aria-hidden="true"></span>
+      <h2 class="win__title" id="t-social">HORNEY Messenger</h2>
+      <div class="win__ctl">
+        <button type="button" data-act="min" aria-label="Minimizar"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 9h8" /></svg></button>
+        <button type="button" data-act="close" class="is-close" aria-label="Fechar"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 3l6 6M9 3l-6 6" /></svg></button>
+      </div>
+    </header>
+    <div class="win__body msn">
+      <div class="msn__me">
+        <span class="msn__avatar"><img src="../assets/eye.png" alt="" width="64" height="64" /></span>
+        <div>
+          <p class="msn__nick">H◎RNEY ⚡😈 <span>(Online)</span></p>
+          <p class="msn__psm">♫ Ouvindo: <span id="msn-np">ANTI-RASO — já saiu!!!</span></p>
+        </div>
+      </div>
+      <p class="msn__group">▾ Online (6)</p>
+      <ul class="msn__list" role="list">
+        <li><a class="contact" href="https://www.instagram.com/horney.band/" target="_blank" rel="noopener"><span class="dot" aria-hidden="true"></span><img src="../assets/insta.png" alt="" width="24" height="24" /><span><b>Instagram</b><small>@horney.band · 7.3K seguidores</small></span></a></li>
+        <li><a class="contact" href="https://www.tiktok.com/@horney.band" target="_blank" rel="noopener"><span class="dot" aria-hidden="true"></span><img src="../assets/tiktok.png" alt="" width="24" height="24" /><span><b>TikTok</b><small>@horney.band</small></span></a></li>
+        <li><a class="contact" href="https://www.threads.com/@horney.band" target="_blank" rel="noopener"><span class="dot" aria-hidden="true"></span><span class="glyph" aria-hidden="true">@</span><span><b>Threads</b><small>@horney.band</small></span></a></li>
+        <li><a class="contact" href="https://www.youtube.com/@bandaHorney" target="_blank" rel="noopener"><span class="dot" aria-hidden="true"></span><span class="glyph glyph--yt" aria-hidden="true">▶</span><span><b>YouTube</b><small>@bandaHorney</small></span></a></li>
+        <li><a class="contact" href="https://open.spotify.com/artist/5zJVmieIGGEeOKbIrXmhZi" target="_blank" rel="noopener"><span class="dot" aria-hidden="true"></span><span class="glyph glyph--sp" aria-hidden="true">♫</span><span><b>Spotify</b><small>1.8K ouvintes mensais</small></span></a></li>
+        <li><a class="contact" href="https://ps.algohits.com/horney-anti-raso" target="_blank" rel="noopener"><span class="dot dot--away" aria-hidden="true"></span><span class="glyph glyph--y" aria-hidden="true">⚡</span><span><b>Todos os links</b><small>pre-save · ANTI-RASO</small></span></a></li>
+      </ul>
+      <div class="msn__foot">
+        <button type="button" class="btn" id="nudge-btn">Chamar a atenção</button>
+        <a class="btn btn--y" href="https://ig.me/m/horney.band" target="_blank" rel="noopener">Mandar DM ↗</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Image viewer ===== -->
+  <section class="win win--img" id="win-img" data-title="imagem.jpg" data-icon="img" aria-labelledby="t-img" tabindex="-1" hidden>
+    <header class="win__bar">
+      <span class="win__ico win__ico--img" aria-hidden="true"></span>
+      <h2 class="win__title" id="t-img">Visualizador de imagens</h2>
+      <div class="win__ctl">
+        <button type="button" data-act="min" aria-label="Minimizar"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 9h8" /></svg></button>
+        <button type="button" data-act="max" aria-label="Maximizar"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 2.5h7v7h-7z" /></svg></button>
+        <button type="button" data-act="close" class="is-close" aria-label="Fechar"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 3l6 6M9 3l-6 6" /></svg></button>
+      </div>
+    </header>
+    <div class="win__body viewer">
+      <img id="img-view" src="../assets/sympla-rock-night.jpg" alt="Flyer do Rock Night na FFFront, São Paulo, com HORNEY e Mastrobiso" width="1179" height="662" loading="lazy" />
+      <p id="img-cap">Flyer do Rock Night na FFFront, São Paulo, com HORNEY e Mastrobiso</p>
+    </div>
+  </section>
+</main>
+
+<!-- ===== Start menu ===== -->
+<div class="startmenu" id="start-menu" hidden>
+  <div class="startmenu__head"><span class="msn__avatar"><img src="../assets/eye.png" alt="" width="48" height="48" /></span><b>HORNEY</b></div>
+  <div class="startmenu__cols">
+    <ul class="startmenu__l" role="list">
+      <li><button type="button" data-open="win-player"><span class="mi mi--amp" aria-hidden="true"></span>HORNEY AMP<small>tocar ANTI-RASO</small></button></li>
+      <li><button type="button" data-open="win-nfo"><span class="mi mi--nfo" aria-hidden="true"></span>LEIA-ME.nfo<small>quem é a banda</small></button></li>
+      <li><button type="button" data-open="win-disco"><span class="mi mi--folder" aria-hidden="true"></span>Discografia</button></li>
+      <li><button type="button" data-open="win-video"><span class="mi mi--video" aria-hidden="true"></span>VÍDEO.avi</button></li>
+      <li><button type="button" data-open="win-shows"><span class="mi mi--txt" aria-hidden="true"></span>SHOWS.txt</button></li>
+      <li><button type="button" data-open="win-merch"><span class="mi mi--folder" aria-hidden="true"></span>MERCH</button></li>
+      <li><button type="button" data-open="win-social"><span class="mi mi--msn" aria-hidden="true"></span>Messenger</button></li>
+    </ul>
+    <ul class="startmenu__r" role="list">
+      <li><a href="https://www.instagram.com/horney.band/" target="_blank" rel="noopener">Instagram ↗</a></li>
+      <li><a href="https://open.spotify.com/artist/5zJVmieIGGEeOKbIrXmhZi" target="_blank" rel="noopener">Spotify ↗</a></li>
+      <li><a href="https://www.youtube.com/@bandaHorney" target="_blank" rel="noopener">YouTube ↗</a></li>
+      <li><a href="https://www.tiktok.com/@horney.band" target="_blank" rel="noopener">TikTok ↗</a></li>
+      <li><a href="https://www.threads.com/@horney.band" target="_blank" rel="noopener">Threads ↗</a></li>
+      <li><a href="https://ps.algohits.com/horney-anti-raso" target="_blank" rel="noopener">Pre-save / links ↗</a></li>
+    </ul>
+  </div>
+  <div class="startmenu__foot">
+    <a href="../index.html">← all concepts</a>
+    <button type="button" id="shutdown-btn"><span aria-hidden="true">⏻</span> Desligar</button>
+  </div>
+</div>
+
+<!-- ===== Calendar popover ===== -->
+<div class="cal" id="cal" hidden>
+  <div class="cal__head">
+    <button type="button" id="cal-prev" aria-label="Mês anterior">‹</button>
+    <p id="cal-title" aria-live="polite">outubro 2026</p>
+    <button type="button" id="cal-next" aria-label="Próximo mês">›</button>
+  </div>
+  <div class="cal__grid" id="cal-grid"></div>
+  <p class="cal__legend"><i></i> dia de show HORNEY</p>
+</div>
+
+<!-- ===== Balloon tip ===== -->
+<div class="balloon" id="balloon" role="status" aria-live="polite" hidden>
+  <button type="button" class="balloon__x" id="balloon-x" aria-label="Fechar aviso">×</button>
+  <p class="balloon__title" id="balloon-title"></p>
+  <p class="balloon__text" id="balloon-text"></p>
+</div>
+
+<!-- ===== Taskbar ===== -->
+<footer class="taskbar" id="taskbar">
+  <button type="button" class="start" id="start-btn" aria-expanded="false" aria-controls="start-menu"><span class="start__eye" aria-hidden="true"></span>iniciar</button>
+  <div class="tasks" id="tasks" role="group" aria-label="Janelas abertas"></div>
+  <div class="tray">
+    <button type="button" class="sys-note" id="sys-note" aria-label="Abrir HORNEY AMP" data-open="win-player">♫</button>
+    <button type="button" class="clock" id="clock" aria-expanded="false" aria-controls="cal">--:--</button>
+    <a class="back" href="../index.html">← all concepts</a>
+  </div>
+</footer>
+
+<!-- ===== Shutdown ===== -->
+<div class="shutdown" id="shutdown" hidden>
+  <div class="shutdown__box">
+    <p class="shutdown__big">Agora é seguro desligar o computador.</p>
+    <p>…e sair de casa pra colar no show. ⚡😈</p>
+    <button type="button" class="btn btn--y" id="reboot-btn">Religar</button>
+  </div>
+</div>
+</body>
+</html>

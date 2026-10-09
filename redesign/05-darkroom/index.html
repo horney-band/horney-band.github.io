@@ -1,0 +1,452 @@
+<!--
+  HORNEY — CONCEPT 05 · DARKROOM
+
+  Rationale:
+  White Pony / Around the Fur era Deftones never sold "heavy" through volume alone. They sold it through
+  mood: underexposed photographs, red-black murk, soft focus, the sense that something beautiful is half
+  hidden. HORNEY sits in the same tension ("nem só rock pesado, nem só música melancólica") and ANTI-RASO
+  is literally about refusing the surface. So the site is a darkroom under a red safelight. Every photo
+  arrives as blank paper and develops as you scroll it into view, the page moves through the real stages
+  of print processing (exposição → revelador → interruptor → fixador → lavagem → secagem), and you can
+  switch the white light on to see the band's true colours: in a real darkroom that ruins the prints,
+  here it reveals them.
+
+  Techniques:
+  - Photo "development" tied to scroll: each print is an <img> multiplied (mix-blend-mode) onto a paper
+    layer; a single CSS custom property (--dev, 0→1, scrubbed by GSAP ScrollTrigger) drives opacity,
+    over-brightness, contrast and blur so highlights stay paper-white and shadows emerge first.
+  - Safelight ON/OFF: one data attribute swaps the palette. Under red light the prints are greyscale
+    multiplied onto red paper (grayscale(var(--gs))), the logo and embeds are tinted; with white light
+    everything transitions to true colour (with a brief "fogging" flash).
+  - Rack-focus typography: headings and Duda's quote resolve from blur to sharp word by word on scroll;
+    link lists pull focus to the hovered/focused item and soften the rest.
+  - Atmosphere: pre-rendered static film-grain tile (stepped transform), drifting light leaks, vignette, a pointer-tracked
+    "enlarger lamp", ambient parallax and blurred drifting fragments of the ANTI-RASO statement.
+  - Darkroom HUD timer (scroll progress as mm:ss + current processing stage), contact-sheet discography
+    on a 35mm strip with grease-pencil mark, clothesline gallery of hanging prints.
+  - Lenis smooth scroll synced to GSAP's ticker; YouTube facades (click-to-load iframes); show status
+    (passado / hoje / próximo) computed from today's date.
+  - Accessibility: prefers-reduced-motion disables Lenis, GSAP, grain/leak animation and shows every
+    print fully developed; skip link, keyboard menu (Esc closes), focus-visible styles, live region for
+    the light switch, content readable without JavaScript.
+-->
+<!doctype html>
+<html lang="pt-BR" data-light="safe">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HORNEY — Darkroom · ANTI-RASO</title>
+  <meta name="description" content="HORNEY: alt rock de Joinville (SC) em português. ANTI-RASO, o EP, já está nas plataformas. Shows, vídeos, merch e redes.">
+  <meta name="theme-color" content="#0b0302">
+  <link rel="icon" type="image/png" href="../assets/eye.png">
+
+  <script>
+    (function () {
+      var d = document.documentElement;
+      d.classList.add('js');
+      if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) d.classList.add('motion');
+      try {
+        var l = localStorage.getItem('horney-darkroom-light');
+        if (l === 'white' || l === 'safe') d.setAttribute('data-light', l);
+      } catch (e) {}
+      // Safety net: if the scripts never arrive, show every print developed.
+      setTimeout(function () { if (!window.__darkroom) d.classList.remove('motion'); }, 4000);
+    })();
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500&family=Instrument+Serif:ital@0;1&family=Inter+Tight:wght@300;400;600;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lenis@1.3.26/dist/lenis.css">
+  <link rel="stylesheet" href="style.css">
+
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gsap.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/ScrollTrigger.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/lenis@1.3.26/dist/lenis.min.js" defer></script>
+  <script src="script.js" defer></script>
+</head>
+<body>
+  <a class="skip" href="#main">Pular para o conteúdo</a>
+
+  <!-- Atmosphere layers (decorative) -->
+  <div class="atmo" aria-hidden="true">
+    <div class="leak leak--a"></div>
+    <div class="leak leak--b"></div>
+    <div class="leak leak--c"></div>
+    <div class="lamp"></div>
+    <div class="drift">
+      <span style="--x:6%;--y:22%;--f:1.1rem;--b:3px" data-drift="0.35">mergulhar fundo nas coisas</span>
+      <span style="--x:64%;--y:34%;--f:2.2rem;--b:6px" data-drift="0.8">anti-raso</span>
+      <span style="--x:14%;--y:58%;--f:1.6rem;--b:4px" data-drift="0.55">se recusar</span>
+      <span style="--x:58%;--y:76%;--f:1.2rem;--b:2.5px" data-drift="0.3">apenas na superfície</span>
+      <span style="--x:30%;--y:96%;--f:2.6rem;--b:7px" data-drift="0.95">quebra-cabeça</span>
+      <span style="--x:72%;--y:118%;--f:1.3rem;--b:3px" data-drift="0.45">nem só rock pesado</span>
+      <span style="--x:4%;--y:132%;--f:1.4rem;--b:4px" data-drift="0.6">nem só música melancólica</span>
+      <span style="--x:48%;--y:150%;--f:2rem;--b:5px" data-drift="0.85">romântica</span>
+    </div>
+    <div class="vignette"></div>
+    <div class="grain"></div>
+    <div class="flash"></div>
+  </div>
+
+  <header class="top">
+    <a class="brand" href="#revelacao" aria-label="HORNEY — início">
+      <img src="../assets/eye.png" alt="" width="1024" height="1024">
+      <span>H◎RNEY</span>
+    </a>
+
+    <button class="menu-btn" type="button" aria-expanded="false" aria-controls="site-nav">
+      <span class="menu-btn__bars" aria-hidden="true"></span>
+      <span class="menu-btn__label">Menu</span>
+    </button>
+
+    <nav class="nav" id="site-nav" aria-label="Seções">
+      <ol>
+        <li><a href="#musica"><i aria-hidden="true">02</i>Música</a></li>
+        <li><a href="#fotos"><i aria-hidden="true">03</i>Fotos</a></li>
+        <li><a href="#video"><i aria-hidden="true">04</i>Vídeo</a></li>
+        <li><a href="#shows"><i aria-hidden="true">05</i>Shows</a></li>
+        <li><a href="#merch"><i aria-hidden="true">06</i>Merch</a></li>
+        <li><a href="#contato"><i aria-hidden="true">07</i>Contato</a></li>
+      </ol>
+    </nav>
+
+    <button class="light-toggle" id="lightToggle" type="button">
+      <span class="light-toggle__bulb" aria-hidden="true"></span>
+      <span class="light-toggle__label">Acender a luz</span>
+    </button>
+  </header>
+
+  <p class="sr-only" id="lightStatus" role="status" aria-live="polite"></p>
+
+  <main id="main" tabindex="-1">
+
+    <!-- 00 · EXPOSIÇÃO -->
+    <section class="hero" id="revelacao" tabindex="-1" data-stage="00 · Exposição" aria-labelledby="hero-title">
+      <div class="hero__tray" aria-hidden="true"></div>
+      <figure class="print print--hero" style="--exp:1.7" data-speed="0.6">
+        <img src="../assets/live-crowd.jpg" width="1366" height="768" fetchpriority="high"
+             alt="Duda Maiolini de costas no palco, braço erguido e microfone na mão, diante de uma plateia lotada">
+      </figure>
+
+      <div class="hero__copy">
+        <p class="kicker" data-intro>Joinville · SC · Brasil &nbsp;/&nbsp; alt rock em português</p>
+        <h1 id="hero-title" class="hero__title">
+          <span class="sr-only">HORNEY</span>
+          <img class="logo" src="../assets/logo-wordmark.png" alt="" width="1200" height="519">
+        </h1>
+        <p class="hero__lede" data-intro>Fotografias de uma banda que se recusa a viver na superfície.</p>
+        <div class="hero__ctas" data-intro>
+          <a class="btn btn--solid" href="#musica">Ouvir ANTI-RASO</a>
+          <a class="btn" href="#shows">09 OUT · último show do ano</a>
+        </div>
+      </div>
+
+      <p class="hero__cue" aria-hidden="true"><span>role para revelar</span><b></b></p>
+    </section>
+
+    <!-- 01 · REVELADOR -->
+    <section class="manifesto wrap" id="manifesto" tabindex="-1" data-stage="01 · Revelador" aria-labelledby="manifesto-title">
+      <p class="kicker"><span>01</span> Revelador — quem é a HORNEY</p>
+      <h2 class="sr-only" id="manifesto-title">Manifesto</h2>
+
+      <div class="manifesto__grid">
+        <figure class="quote">
+          <blockquote>
+            <p class="quote__text" data-split>“ANTI-RASO significa mergulhar fundo nas coisas. É se recusar a viver apenas na superfície.”</p>
+          </blockquote>
+          <figcaption>— Duda Maiolini, voz e letras</figcaption>
+        </figure>
+
+        <div class="lens" aria-hidden="true" data-speed="-0.8">
+          <img src="../assets/eye.png" alt="" width="1024" height="1024">
+        </div>
+      </div>
+
+      <dl class="facts">
+        <div class="focus">
+          <dt>Origem</dt>
+          <dd>Joinville, Santa Catarina</dd>
+        </div>
+        <div class="focus">
+          <dt>Som</dt>
+          <dd>Alt/indie rock com pegada punk, hardcore e grunge — e uns toques de MPB</dd>
+        </div>
+        <div class="focus">
+          <dt>Língua</dt>
+          <dd>Português, desde 2026</dd>
+        </div>
+        <div class="focus">
+          <dt>Formação</dt>
+          <dd>Duda Maiolini (voz, letras) · Rafa Bello (composição) · +2</dd>
+        </div>
+      </dl>
+
+      <p class="manifesto__aside focus">“A Horney não é uma banda que vai tocar só rock pesado, nem uma banda que vai tocar só música melancólica.”</p>
+    </section>
+
+    <!-- 02 · INTERRUPTOR — MÚSICA -->
+    <section class="music wrap" id="musica" tabindex="-1" data-stage="02 · Interruptor" aria-labelledby="music-title">
+      <p class="kicker"><span>02</span> Interruptor — música</p>
+      <h2 class="h2 focus" id="music-title">Anti<em>-raso</em></h2>
+      <p class="music__sub">EP · lançado em 30.07.2026 · 4 faixas</p>
+
+      <div class="ep">
+        <figure class="print print--cover" data-develop style="--exp:1.15">
+          <img src="../assets/cover-anti-raso.jpg" width="640" height="640" loading="lazy"
+               alt="Capa de ANTI-RASO: uma porta aberta no meio do mar, um olho gigante dentro dela e raios no céu">
+        </figure>
+
+        <div class="ep__body">
+          <ol class="tracks">
+            <li><span class="tracks__n">01</span><span class="tracks__t">OFF!</span></li>
+            <li><span class="tracks__n">02</span><span class="tracks__t">QUEBRA-CABEÇA <small>feat. Dani Buarque</small></span></li>
+            <li><span class="tracks__n">03</span><span class="tracks__t">MERGULHAR</span></li>
+            <li><span class="tracks__n">04</span><span class="tracks__t">ROMÂNTICA</span></li>
+          </ol>
+
+          <a class="review" href="https://www.unglued.com.br/reviews/anti-raso" target="_blank" rel="noopener">
+            <span class="review__score">7.8<small>/10</small></span>
+            <span class="review__src">Resenha do Unglued <span aria-hidden="true">↗</span></span>
+          </a>
+
+          <div class="ep__ctas">
+            <a class="btn btn--solid" href="https://open.spotify.com/album/7EM81z5ydGQq04ZbkIE5aS" target="_blank" rel="noopener">Ouvir no Spotify ↗</a>
+            <a class="btn" href="https://ps.algohits.com/horney-anti-raso" target="_blank" rel="noopener">Outras plataformas ↗</a>
+          </div>
+        </div>
+
+        <div class="embed">
+          <iframe src="https://open.spotify.com/embed/album/7EM81z5ydGQq04ZbkIE5aS?utm_source=generator&amp;theme=0"
+                  title="Player do Spotify: ANTI-RASO, de HORNEY" width="100%" height="420" loading="lazy"
+                  allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"></iframe>
+        </div>
+      </div>
+
+      <div class="sheet">
+        <h3 class="sheet__title">Folha de contato <span>— discografia</span></h3>
+        <div class="strip" role="list">
+          <a class="frame frame--pick" role="listitem" href="https://open.spotify.com/album/7EM81z5ydGQq04ZbkIE5aS" target="_blank" rel="noopener">
+            <span class="frame__no" aria-hidden="true">▸ 01A</span>
+            <figure class="print" data-develop><img src="../assets/cover-anti-raso.jpg" width="640" height="640" loading="lazy" alt=""><svg class="grease" viewBox="0 0 200 200" aria-hidden="true" focusable="false"><path pathLength="1" d="M100 12c52 2 90 36 86 86s-46 88-94 86S10 146 14 96 54 18 112 16"/></svg></figure>
+            <span class="frame__meta"><b>ANTI-RASO</b><span>EP · 2026</span></span>
+            <span class="frame__note" aria-hidden="true">← esta!</span>
+          </a>
+          <a class="frame" role="listitem" href="https://open.spotify.com/album/5jJ1py37M3i7qaZgkOOf4V" target="_blank" rel="noopener">
+            <span class="frame__no" aria-hidden="true">▸ 02A</span>
+            <figure class="print" data-develop><img src="../assets/cover-mergulhar.jpg" width="640" height="640" loading="lazy" alt=""></figure>
+            <span class="frame__meta"><b>MERGULHAR</b><span>Single · 2026</span></span>
+          </a>
+          <a class="frame" role="listitem" href="https://open.spotify.com/album/6Cg0ULHHKTsJo7GlEfPKrF" target="_blank" rel="noopener">
+            <span class="frame__no" aria-hidden="true">▸ 03A</span>
+            <figure class="print" data-develop><img src="../assets/cover-off.jpg" width="640" height="640" loading="lazy" alt=""></figure>
+            <span class="frame__meta"><b>OFF!</b><span>Single · 13.11.2025</span></span>
+          </a>
+          <a class="frame" role="listitem" href="https://open.spotify.com/album/3m7dNgjIIiHDuZiNcu8Vhi" target="_blank" rel="noopener">
+            <span class="frame__no" aria-hidden="true">▸ 04A</span>
+            <figure class="print" data-develop><img src="../assets/cover-four-rooms.jpg" width="640" height="640" loading="lazy" alt=""></figure>
+            <span class="frame__meta"><b>Four Rooms for Four Fools</b><span>EP · 2022</span></span>
+          </a>
+        </div>
+        <p class="sheet__note">Toque num frame para abrir no Spotify · <a href="https://open.spotify.com/artist/5zJVmieIGGEeOKbIrXmhZi" target="_blank" rel="noopener">perfil do artista ↗</a></p>
+      </div>
+    </section>
+
+    <!-- 03 · FIXADOR — FOTOS -->
+    <section class="varal" id="fotos" tabindex="-1" data-stage="03 · Fixador" aria-labelledby="fotos-title">
+      <div class="wrap">
+        <p class="kicker"><span>03</span> Fixador — fotos</p>
+        <h2 class="h2 focus" id="fotos-title">Varal<em>.</em></h2>
+        <p class="varal__sub">Cópias ainda úmidas, penduradas no fio. Os originais (e muitos outros) estão no Instagram.</p>
+      </div>
+
+      <ul class="varal__row">
+        <li style="--r:-3deg;--d:0s">
+          <span class="clip" aria-hidden="true"></span>
+          <figure class="print" data-develop style="--exp:1.1">
+            <img src="../assets/ig-post-2.jpg" width="640" height="640" loading="lazy" alt="Vocalista da HORNEY gritando ao microfone, cabelo platinado, guitarrista ao fundo">
+          </figure>
+          <p class="pencil">fr. 07 — ao vivo</p>
+        </li>
+        <li style="--r:2.5deg;--d:-1.4s">
+          <span class="clip" aria-hidden="true"></span>
+          <figure class="print" data-develop>
+            <img src="../assets/ig-post-4.jpg" width="640" height="640" loading="lazy" alt="Guitarrista de cabelo cacheado sob luz vermelha, com o texto UM RECADO IMPORTANTE">
+          </figure>
+          <p class="pencil">“um recado importante”</p>
+        </li>
+        <li style="--r:-1.5deg;--d:-2.6s">
+          <span class="clip" aria-hidden="true"></span>
+          <figure class="print" data-develop style="--exp:1.05">
+            <img src="../assets/ig-post-5.jpg" width="640" height="640" loading="lazy" alt="Plateia sorrindo e fazendo chifrinhos para a câmera depois do show">
+          </figure>
+          <p class="pencil">a gente + vocês</p>
+        </li>
+        <li style="--r:3deg;--d:-0.7s">
+          <span class="clip" aria-hidden="true"></span>
+          <figure class="print" data-develop>
+            <img src="../assets/ig-post-1.jpg" width="640" height="640" loading="lazy" alt="Cartaz da produtora Da Bôa: a banda posando em luz azul dentro de um círculo de chamas">
+          </figure>
+          <p class="pencil">da bôa apresenta</p>
+        </li>
+      </ul>
+
+      <div class="wrap varal__cta">
+        <a class="btn" href="https://www.instagram.com/horney.band/" target="_blank" rel="noopener">Ver tudo em @horney.band ↗</a>
+      </div>
+    </section>
+
+    <!-- 04 · PROJEÇÃO — VÍDEO -->
+    <section class="video wrap" id="video" tabindex="-1" data-stage="04 · Projeção" aria-labelledby="video-title">
+      <p class="kicker"><span>04</span> Projeção — vídeo</p>
+      <h2 class="h2 focus" id="video-title">Em <em>movimento</em></h2>
+
+      <div class="screens">
+        <article class="screen screen--main">
+          <div class="screen__frame">
+            <button class="facade" type="button" data-yt="9uP1P11at9M" data-title="HORNEY — Fool's Game (videoclipe oficial)">
+              <img src="../assets/yt-fools-game.jpg" width="1280" height="720" loading="lazy" alt="">
+              <span class="facade__play" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></span>
+              <span class="sr-only">Assistir Fool's Game, videoclipe oficial</span>
+            </button>
+          </div>
+          <h3>Fool’s Game</h3>
+          <p>Videoclipe oficial · 2022 · direção Rique Duarte</p>
+        </article>
+
+        <article class="screen">
+          <div class="screen__frame">
+            <button class="facade" type="button" data-yt="V9Rpgtc2vTs" data-title="HORNEY ao vivo (trecho de 38 segundos)">
+              <img src="../assets/yt-live.jpg" width="1280" height="720" loading="lazy" alt="">
+              <span class="facade__play" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></span>
+              <span class="sr-only">Assistir Horney Live, trecho ao vivo de 38 segundos</span>
+            </button>
+          </div>
+          <h3>Horney Live</h3>
+          <p>38 segundos de palco</p>
+        </article>
+      </div>
+
+      <p class="video__more"><a href="https://www.youtube.com/@bandaHorney" target="_blank" rel="noopener">Canal no YouTube ↗</a></p>
+    </section>
+
+    <!-- 05 · LAVAGEM — SHOWS -->
+    <section class="shows wrap" id="shows" tabindex="-1" data-stage="05 · Lavagem" aria-labelledby="shows-title">
+      <p class="kicker"><span>05</span> Lavagem — shows</p>
+      <h2 class="h2 focus" id="shows-title">Ao <em>vivo</em></h2>
+      <p class="shows__shout">SAI DE CASA E COLE NOS SHOWS!!! ⚡️😈</p>
+
+      <div class="shows__grid">
+        <ol class="log">
+          <li class="show is-next" data-date="2026-10-09">
+            <time class="show__date" datetime="2026-10-09"><b>09</b> OUT 2026</time>
+            <div class="show__info">
+              <h3>Último show do ano</h3>
+              <p>LOCAL EM BREVE</p>
+            </div>
+            <span class="show__status">Próximo</span>
+            <a class="show__cta" href="https://www.instagram.com/horney.band/" target="_blank" rel="noopener">Avisos no Instagram ↗</a>
+          </li>
+          <li class="show is-past" data-date="2026-10-03">
+            <time class="show__date" datetime="2026-10-03"><b>03</b> OUT 2026</time>
+            <div class="show__info">
+              <h3>Show</h3>
+              <p>Local não divulgado</p>
+            </div>
+            <span class="show__status">Passado</span>
+          </li>
+          <li class="show is-past" data-date="2026-09-17">
+            <time class="show__date" datetime="2026-09-17"><b>17</b> SET 2026</time>
+            <div class="show__info">
+              <h3>Rock Night @ FFFront</h3>
+              <p>São Paulo · com Mastrobiso</p>
+            </div>
+            <span class="show__status">Passado</span>
+          </li>
+        </ol>
+
+        <figure class="print print--flyer" data-develop data-speed="0.5">
+          <img src="../assets/sympla-rock-night.jpg" width="1179" height="662" loading="lazy"
+               alt="Flyer desenhado à mão da Rock Night no FFFront em 17 de setembro: HORNEY + Mastrobiso">
+          <figcaption class="pencil">17/09 · FFFront, SP</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <!-- 06 · SECAGEM — MERCH -->
+    <section class="merch wrap" id="merch" tabindex="-1" data-stage="06 · Secagem" aria-labelledby="merch-title">
+      <p class="kicker"><span>06</span> Secagem — merch</p>
+      <h2 class="h2 focus" id="merch-title">Ainda <em>secando</em></h2>
+      <p class="merch__sub">As peças ainda não saíram do varal. Quer reservar ou saber primeiro? Manda uma DM.</p>
+
+      <ul class="goods">
+        <li class="good">
+          <div class="good__art good__art--tee" aria-hidden="true">
+            <div class="tee"><img src="../assets/cover-anti-raso.jpg" alt="" width="640" height="640" loading="lazy"></div>
+          </div>
+          <h3>Camiseta ANTI-RASO</h3>
+          <p>Algodão preto, capa do EP na frente.</p>
+          <span class="stamp">Em breve</span>
+        </li>
+        <li class="good">
+          <div class="good__art good__art--poster" aria-hidden="true">
+            <figure class="print"><img src="../assets/live-crowd.jpg" alt="" width="1366" height="768" loading="lazy"></figure>
+          </div>
+          <h3>Pôster “Plateia”</h3>
+          <p>Impressão fosca, a foto do palco que abre este site.</p>
+          <span class="stamp">Em breve</span>
+        </li>
+        <li class="good">
+          <div class="good__art good__art--bag" aria-hidden="true">
+            <div class="bag"><img src="../assets/eye.png" alt="" width="1024" height="1024" loading="lazy"></div>
+          </div>
+          <h3>Ecobag Olho</h3>
+          <p>O sol-olho do logo, em serigrafia.</p>
+          <span class="stamp">Em breve</span>
+        </li>
+        <li class="good">
+          <div class="good__art good__art--patch" aria-hidden="true">
+            <div class="patch"><img src="../assets/logo-wordmark.png" alt="" width="1200" height="519" loading="lazy"></div>
+          </div>
+          <h3>Patch bordado H◎RNEY</h3>
+          <p>Pra jaqueta, mochila, case de guitarra.</p>
+          <span class="stamp">Em breve</span>
+        </li>
+      </ul>
+
+      <p class="merch__cta"><a class="btn btn--solid" href="https://ig.me/m/horney.band" target="_blank" rel="noopener">Reservar via DM no Instagram ↗</a></p>
+    </section>
+
+    <!-- 07 · CÓPIA FINAL — CONTATO -->
+    <section class="contact wrap" id="contato" tabindex="-1" data-stage="07 · Cópia final" aria-labelledby="contact-title">
+      <p class="kicker"><span>07</span> Cópia final — redes</p>
+      <h2 class="h2 h2--huge focus" id="contact-title">Fica <em>no escuro</em> com a gente</h2>
+
+      <ul class="links">
+        <li><a href="https://www.instagram.com/horney.band/" target="_blank" rel="noopener"><span class="links__n">Instagram</span><span class="links__h">@horney.band · 7.3K</span></a></li>
+        <li><a href="https://open.spotify.com/artist/5zJVmieIGGEeOKbIrXmhZi" target="_blank" rel="noopener"><span class="links__n">Spotify</span><span class="links__h">1.8K ouvintes/mês</span></a></li>
+        <li><a href="https://www.youtube.com/@bandaHorney" target="_blank" rel="noopener"><span class="links__n">YouTube</span><span class="links__h">@bandaHorney</span></a></li>
+        <li><a href="https://www.tiktok.com/@horney.band" target="_blank" rel="noopener"><span class="links__n">TikTok</span><span class="links__h">@horney.band</span></a></li>
+        <li><a href="https://www.threads.com/@horney.band" target="_blank" rel="noopener"><span class="links__n">Threads</span><span class="links__h">@horney.band</span></a></li>
+        <li><a href="https://ps.algohits.com/horney-anti-raso" target="_blank" rel="noopener"><span class="links__n">Todas as plataformas</span><span class="links__h">ANTI-RASO</span></a></li>
+      </ul>
+
+      <footer class="foot">
+        <img src="../assets/eye.png" alt="" width="1024" height="1024" loading="lazy">
+        <p>HORNEY · Joinville, SC · © 2026</p>
+        <p>Conceito 05 — Darkroom. Revelado sob luz vermelha.</p>
+        <a href="#revelacao">Voltar ao topo ↑</a>
+      </footer>
+    </section>
+  </main>
+
+  <!-- Darkroom timer HUD (decorative mirror of scroll progress) -->
+  <div class="hud" aria-hidden="true">
+    <span class="hud__dot"></span>
+    <span class="hud__stage">00 · Exposição</span>
+    <span class="hud__time">00:00</span>
+  </div>
+
+  <a class="back" href="../index.html">← all concepts</a>
+</body>
+</html>

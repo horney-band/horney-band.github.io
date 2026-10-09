@@ -1,0 +1,652 @@
+<!--
+  CONCEPT 10 — ROAD TRIP (HORNEY · "ANTI-RASO NA ESTRADA")
+
+  Rationale: a band is a van, a road and a calendar. This concept turns the whole site into one
+  continuous drive from Joinville (KM 0) up the BR-101/BR-116 to São Paulo and beyond. You don't
+  "browse sections", you pass them: the ANTI-RASO EP is a giant roadside billboard, the radio is a
+  dashboard unit playing the Spotify embed, the band hangs out at a bus stop, the discography is a
+  row of highway exits seen in the rear-view mirror, the videos play on a drive-in screen, the shows
+  are green highway signs (past ones taped over and spray-crossed), merch is a gas station whose
+  price board reads "EM BREVE", and the socials are the neon at the end of the road. The sky turns
+  from day to dusk to night across the journey, the sun-eye from the logo sets behind the hills and
+  comes back as the moon. 2000s road-movie / post-grunge-tour-diary energy with 2026 craft.
+
+  Techniques:
+  - GSAP 3.15.0 + ScrollTrigger: vertical scroll through a tall runway (.drive) scrubs a horizontal
+    track while the stage stays put with CSS position:sticky (no pin-spacer re-parenting, so the
+    Spotify iframe is never moved/reloaded). gsap.matchMedia: only ≥900px wide, ≥760px tall, motion allowed.
+  - containerAnimation-driven reveals (billboards rise, signs swing on their posts, tape strikes draw).
+  - Scroll-linked CSS custom properties (--dusk, --night, quantized) drive the sky
+    gradients, sun/moon arc, stars, headlights, billboard lamps and city windows.
+  - Multi-depth parallax (far hills + São Paulo skyline, utility poles) and a compositor-only road dash.
+  - Inline SVG Kombi-style tour van with wheels rotating by distance travelled, bob/exhaust while moving
+    and velocity tilt.
+  - Mobile / reduced-motion fallback: native horizontal scroll-snap "swipe road" (no pin, no parallax),
+    wheel/arrow-key paging, same sky progression from scrollLeft.
+  - YouTube facades (click-to-load iframes), Spotify embed injected once when the road nears the radio, date-aware show statuses
+    (past = crossed out, today = "É HOJE"), keyboard: ←/→ jump between stops, focus follows the road.
+-->
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>HORNEY — ANTI-RASO na estrada · Joinville → São Paulo</title>
+  <meta name="description" content="HORNEY: alt/indie rock de Joinville (SC). Novo EP ANTI-RASO, shows, vídeos e merch — uma viagem de Joinville a São Paulo.">
+  <meta name="theme-color" content="#0c0c10">
+  <link rel="icon" href="../assets/eye.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Monoton&family=Overpass:wght@400;600;800;900&family=Permanent+Marker&display=swap">
+  <link rel="stylesheet" href="style.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gsap.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/ScrollTrigger.min.js"></script>
+  <script defer src="script.js"></script>
+</head>
+<body>
+  <a class="skip" href="#anti-raso">Pular pro EP ANTI-RASO</a>
+
+  <!-- ============ HUD ============ -->
+  <header class="hud">
+    <a class="hud-brand" href="#partida" aria-label="HORNEY — voltar ao início (KM 0)">
+      <span class="hud-eye" aria-hidden="true"><img src="../assets/eye.png" alt=""></span>
+      <span class="hud-name">H◎RNEY</span>
+    </a>
+
+    <div class="odo" aria-hidden="true" title="Quilometragem da viagem">
+      <span class="odo-label">KM</span><span class="odo-digits" data-odo>000</span>
+    </div>
+
+    <button class="route-toggle" type="button" aria-expanded="false" aria-controls="route-nav">
+      <span class="route-toggle-icon" aria-hidden="true"></span>ROTA
+    </button>
+
+    <nav class="route-nav" id="route-nav" aria-label="Paradas da viagem">
+      <ol>
+        <li><a href="#partida"><b>KM 0</b> Partida</a></li>
+        <li><a href="#anti-raso"><b>01</b> Anti-raso</a></li>
+        <li><a href="#radio"><b>02</b> Rádio</a></li>
+        <li><a href="#banda"><b>03</b> Banda</a></li>
+        <li><a href="#discos"><b>04</b> Discos</a></li>
+        <li><a href="#video"><b>05</b> Drive-in</a></li>
+        <li><a href="#shows"><b>06</b> Shows</a></li>
+        <li><a href="#merch"><b>07</b> Posto</a></li>
+        <li><a href="#redes"><b>08</b> Destino</a></li>
+      </ol>
+    </nav>
+    <div class="route-bar" aria-hidden="true"><span class="route-fill"></span></div>
+  </header>
+
+  <a class="all-concepts" href="../index.html">← all concepts</a>
+
+  <!-- ============ THE ROAD ============ -->
+  <!-- .drive is the scroll runway in pinned mode: .journey sticks inside it (CSS sticky, no DOM re-parenting) -->
+  <div class="drive" id="drive">
+  <main class="journey" id="journey">
+
+    <!-- World (decorative, scroll-linked) -->
+    <div class="world" aria-hidden="true">
+      <div class="sky sky--day"></div>
+      <div class="sky sky--dusk"></div>
+      <div class="sky sky--night"></div>
+      <div class="stars"></div>
+      <div class="sun"><span class="sun-disc"></span><img src="../assets/eye.png" alt=""></div>
+      <div class="moon"><span class="moon-disc"></span><img src="../assets/eye.png" alt=""></div>
+      <div class="cloud cloud--a"></div>
+      <div class="cloud cloud--b"></div>
+      <div class="cloud cloud--c"></div>
+
+      <div class="layer layer--far" data-depth>
+        <svg class="far-svg" viewBox="0 0 3000 300" preserveAspectRatio="none">
+          <path fill="#86a9c6" d="M0 170 C120 120 220 90 340 120 S560 60 700 110 S930 150 1060 95 S1300 40 1450 105 S1700 150 1850 120 S2050 160 2150 175 L2150 300 L0 300 Z"/>
+          <path fill="#4f8a5e" d="M0 230 C150 190 260 170 420 200 S700 160 860 205 S1120 230 1280 190 S1560 170 1720 215 S1980 240 2140 230 L2160 300 L0 300 Z"/>
+          <!-- São Paulo skyline appears at the end of the journey -->
+          <g fill="#3b4d68">
+            <rect x="2150" y="150" width="60" height="150"/><rect x="2215" y="110" width="44" height="190"/>
+            <rect x="2262" y="170" width="70" height="130"/><rect x="2338" y="80" width="38" height="220"/>
+            <rect x="2380" y="130" width="64" height="170"/><rect x="2450" y="60" width="30" height="240"/>
+            <rect x="2484" y="140" width="80" height="160"/><rect x="2570" y="95" width="50" height="205"/>
+            <rect x="2626" y="160" width="66" height="140"/><rect x="2698" y="40" width="34" height="260"/>
+            <rect x="2715" y="22" width="3" height="20"/>
+            <rect x="2736" y="120" width="72" height="180"/><rect x="2814" y="85" width="46" height="215"/>
+            <rect x="2866" y="150" width="60" height="150"/><rect x="2930" y="110" width="70" height="190"/>
+          </g>
+          <path fill="#2f5b3c" d="M0 262 Q400 240 800 262 T1600 258 T2400 264 T3000 260 L3000 300 L0 300Z"/>
+        </svg>
+        <div class="dim"></div>
+        <svg class="far-lights" viewBox="0 0 3000 300" preserveAspectRatio="none">
+          <g fill="#ffd36b">
+            <rect x="2222" y="130" width="8" height="10"/><rect x="2240" y="160" width="8" height="10"/><rect x="2222" y="200" width="8" height="10"/>
+            <rect x="2345" y="100" width="7" height="10"/><rect x="2360" y="140" width="7" height="10"/><rect x="2345" y="190" width="7" height="10"/>
+            <rect x="2456" y="80" width="6" height="10"/><rect x="2456" y="130" width="6" height="10"/><rect x="2468" y="180" width="6" height="10"/>
+            <rect x="2580" y="115" width="8" height="10"/><rect x="2600" y="160" width="8" height="10"/><rect x="2580" y="215" width="8" height="10"/>
+            <rect x="2704" y="60" width="7" height="10"/><rect x="2718" y="110" width="7" height="10"/><rect x="2704" y="170" width="7" height="10"/>
+            <rect x="2824" y="105" width="8" height="10"/><rect x="2842" y="150" width="8" height="10"/><rect x="2824" y="205" width="8" height="10"/>
+            <rect x="2945" y="130" width="8" height="10"/><rect x="2965" y="175" width="8" height="10"/>
+          </g>
+          <circle cx="2716" cy="20" r="4" fill="#ff3b3b"/>
+        </svg>
+      </div>
+
+      <div class="layer layer--mid" data-depth>
+        <div class="dim"></div>
+      </div>
+      <div class="dim-global"></div>
+    </div>
+
+    <!-- Content track -->
+    <div class="track" id="track">
+
+      <!-- ===== KM 0 — PARTIDA ===== -->
+      <section class="panel panel--hero" id="partida" style="--w:100" aria-labelledby="t-partida">
+        <div class="scene">
+          <div class="obj city-sign-wrap" data-reveal="swing">
+            <div class="city-sign">
+              <span class="cs-small">BEM-VINDO A</span>
+              <span class="cs-big">JOINVILLE</span>
+              <span class="cs-small">SANTA CATARINA · BR-101</span>
+              <span class="cs-km">KM 0</span>
+            </div>
+            <div class="legs" style="--leg:16vh"><i></i></div>
+          </div>
+
+          <div class="hero-id">
+            <h1 id="t-partida" class="hero-logo">
+              <img src="../assets/logo-wordmark.png" alt="HORNEY" width="1200" height="519">
+            </h1>
+            <p class="hero-tag">alt/indie rock de <b>Joinville (SC)</b> pro mundo — punk, hardcore, grunge &amp; um pé na MPB.</p>
+            <p class="hero-sub"><span class="stamp">TURNÊ ANTI-RASO 2026</span> <span class="hero-lang">agora em português</span></p>
+            <p class="hero-hint">
+              <span class="hint-pin">ROLA PRA BAIXO PRA DIRIGIR</span>
+              <span class="hint-swipe">ARRASTA PRO LADO PRA DIRIGIR</span>
+              <span class="hint-arrow" aria-hidden="true">→</span>
+            </p>
+          </div>
+
+          <div class="obj hwy-wrap" data-reveal="swing">
+            <div class="hwy-sign">
+              <p class="hwy-head">BR-101 <span>NORTE</span></p>
+              <ul>
+                <li><a href="#anti-raso"><span class="arr" aria-hidden="true">↗</span> ANTI-RASO <small>EP NOVO</small><b>1</b></a></li>
+                <li><a href="#shows"><span class="arr" aria-hidden="true">↑</span> SÃO PAULO <small>SHOWS</small><b>530</b></a></li>
+                <li><a href="#merch"><span class="arr" aria-hidden="true">→</span> POSTO <small>MERCH</small><b>590</b></a></li>
+              </ul>
+            </div>
+            <div class="legs" style="--leg:12vh"><i></i><i></i></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== 01 — ANTI-RASO BILLBOARD ===== -->
+      <section class="panel panel--ep" id="anti-raso" style="--w:125" aria-labelledby="t-ep">
+        <div class="scene">
+          <div class="obj billboard" data-reveal="rise">
+            <div class="bb-lamps" aria-hidden="true"><i></i><i></i><i></i></div>
+            <div class="bb-face">
+              <a class="bb-cover" href="https://open.spotify.com/album/7EM81z5ydGQq04ZbkIE5aS" target="_blank" rel="noopener">
+                <img src="../assets/cover-anti-raso.jpg" alt="Capa do EP ANTI-RASO: uma porta aberta no meio do mar, um olho gigante e raios" width="640" height="640" loading="lazy">
+              </a>
+              <div class="bb-copy">
+                <p class="bb-kicker">EP NOVO · 30.07.2026 · 4 FAIXAS</p>
+                <h2 id="t-ep" class="bb-title">ANTI<span>-</span>RASO</h2>
+                <ol class="bb-tracks">
+                  <li>OFF!</li>
+                  <li>QUEBRA-CABEÇA <small>feat. Dani Buarque</small></li>
+                  <li>MERGULHAR</li>
+                  <li>ROMÂNTICA</li>
+                </ol>
+                <div class="bb-ctas">
+                  <a class="btn btn--spot" href="https://open.spotify.com/album/7EM81z5ydGQq04ZbkIE5aS" target="_blank" rel="noopener">▶ OUVIR NO SPOTIFY</a>
+                  <a class="btn btn--ghost" href="https://ps.algohits.com/horney-anti-raso" target="_blank" rel="noopener">TODOS OS LINKS ↗</a>
+                </div>
+              </div>
+              <a class="sticker" href="https://www.unglued.com.br/reviews/anti-raso" target="_blank" rel="noopener" aria-label="Review do Unglued: nota 7.8 de 10">
+                <span>UNGLUED</span><b>7.8</b><span>/10</span>
+              </a>
+            </div>
+            <div class="legs legs--bb" style="--leg:9vh"><i></i><i></i></div>
+          </div>
+
+          <div class="obj warn-wrap" data-reveal="swing">
+            <div class="warn">
+              <div class="warn-in">
+                <span class="warn-ico" aria-hidden="true">⚠</span>
+                <strong>ÁGUA<br>FUNDA</strong>
+                <span>proibido ficar no raso</span>
+              </div>
+            </div>
+            <div class="legs" style="--leg:14vh"><i></i></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== 02 — RÁDIO ===== -->
+      <section class="panel panel--radio" id="radio" style="--w:105" aria-labelledby="t-radio">
+        <div class="scene">
+          <div class="obj radio-wrap" data-reveal="rise">
+            <div class="radio">
+              <div class="radio-top">
+                <h2 id="t-radio" class="radio-brand">RÁDIO DA VAN <span>AM/FM · STEREO</span></h2>
+                <span class="radio-led" aria-hidden="true"></span>
+              </div>
+              <div class="radio-display" aria-hidden="true">
+                <span class="radio-marquee">♪ TOCANDO AGORA: HORNEY — ANTI-RASO — OFF! · QUEBRA-CABEÇA · MERGULHAR · ROMÂNTICA ♪ AUMENTA O SOM ⚡️&nbsp;&nbsp;&nbsp;</span>
+              </div>
+              <div class="radio-dial" aria-hidden="true">
+                <span>88</span><span>92</span><span>96</span><span>100</span><span>104</span><span>108</span><i class="needle"></i>
+              </div>
+              <div class="radio-player">
+                <iframe title="Player do Spotify: ANTI-RASO, de HORNEY" data-src="https://open.spotify.com/embed/album/7EM81z5ydGQq04ZbkIE5aS?utm_source=generator&amp;theme=0" width="100%" height="420" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"></iframe>
+              </div>
+              <div class="radio-knobs" aria-hidden="true"><i></i><i></i></div>
+            </div>
+            <div class="legs" style="--leg:5vh"><i></i></div>
+          </div>
+
+          <figure class="obj planks" data-reveal="swing">
+            <div class="planks-face">
+              <blockquote>
+                <p>“ANTI-RASO significa mergulhar fundo nas coisas. É se recusar a viver apenas na superfície.”</p>
+              </blockquote>
+              <figcaption>— Duda Maiolini</figcaption>
+            </div>
+            <div class="legs legs--wood" style="--leg:10vh"><i></i><i></i></div>
+          </figure>
+        </div>
+      </section>
+
+      <!-- ===== 03 — BANDA (ponto de ônibus) ===== -->
+      <section class="panel panel--band" id="banda" style="--w:115" aria-labelledby="t-banda">
+        <div class="scene">
+          <div class="obj busstop" data-reveal="rise">
+            <div class="bs-roof" aria-hidden="true"><span>PONTO · LINHA 101 · JOINVILLE ⇄ SÃO PAULO</span></div>
+            <div class="bs-body">
+              <div class="bs-glass">
+                <a class="polaroid" href="https://www.instagram.com/horney.band/" target="_blank" rel="noopener"><img src="../assets/ig-post-1.jpg" alt="Foto recente da HORNEY no Instagram" loading="lazy" width="640" height="640"><span>@horney.band</span></a>
+                <a class="polaroid" href="https://www.instagram.com/horney.band/" target="_blank" rel="noopener"><img src="../assets/ig-post-4.jpg" alt="Guitarrista em luz vermelha: UM RECADO IMPORTANTE" loading="lazy" width="640" height="640"><span>um recado importante</span></a>
+                <a class="polaroid" href="https://www.instagram.com/horney.band/" target="_blank" rel="noopener"><img src="../assets/ig-post-2.jpg" alt="Foto recente da HORNEY no Instagram" loading="lazy" width="640" height="640"><span>bastidores</span></a>
+                <a class="polaroid polaroid--tall" href="https://www.instagram.com/horney.band/" target="_blank" rel="noopener"><img src="../assets/ig-reel-1.jpg" alt="Frame de reel da HORNEY" loading="lazy" width="360" height="640"><span>reel ⚡️</span></a>
+                <a class="polaroid" href="https://www.instagram.com/horney.band/" target="_blank" rel="noopener"><img src="../assets/ig-post-3.jpg" alt="Foto recente da HORNEY no Instagram" loading="lazy" width="640" height="640"><span>na estrada</span></a>
+                <a class="polaroid" href="https://www.instagram.com/horney.band/" target="_blank" rel="noopener"><img src="../assets/ig-post-5.jpg" alt="Foto recente da HORNEY no Instagram" loading="lazy" width="640" height="640"><span>😈</span></a>
+              </div>
+              <article class="bs-poster">
+                <h2 id="t-banda">QUEM TÁ<br>NA VAN</h2>
+                <p>Quarteto de alt/indie rock de <b>Joinville (SC)</b>. Punk, hardcore e grunge com uns respingos de MPB. Desde 2026 cantando em <b>português</b>.</p>
+                <ul class="crew">
+                  <li><b>Duda Maiolini</b> voz &amp; letras</li>
+                  <li><b>Rafa Bello</b> composição</li>
+                  <li><b>+2</b> no barulho</li>
+                </ul>
+                <blockquote class="bs-quote">“A Horney não é uma banda que vai tocar só rock pesado, nem uma banda que vai tocar só música melancólica.” <cite>— Duda</cite></blockquote>
+                <p class="bs-stats"><span><b>7.3K</b> no insta</span><span><b>1.8K</b> ouvintes/mês</span></p>
+              </article>
+            </div>
+            <div class="legs legs--bus" style="--leg:4vh"><i></i><i></i></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== 04 — DISCOS (retrovisor + saídas) ===== -->
+      <section class="panel panel--discos" id="discos" style="--w:140" aria-labelledby="t-discos">
+        <div class="scene">
+          <div class="obj mirror-wrap" data-reveal="swing">
+            <div class="mirror">
+              <h2 id="t-discos">RETROVISOR</h2>
+              <p>o caminho até aqui</p>
+              <small>objetos no retrovisor estão mais perto do que parecem</small>
+            </div>
+            <div class="legs" style="--leg:18vh"><i></i></div>
+          </div>
+
+          <ol class="exits">
+            <li class="obj exit" data-reveal="swing">
+              <a href="https://open.spotify.com/album/3m7dNgjIIiHDuZiNcu8Vhi" target="_blank" rel="noopener">
+                <span class="exit-tab">SAÍDA 2022</span>
+                <span class="exit-face">
+                  <img src="../assets/cover-four-rooms.jpg" alt="Capa de Four Rooms for Four Fools" width="640" height="640" loading="lazy">
+                  <span class="exit-txt"><strong>FOUR ROOMS FOR FOUR FOOLS</strong><em>EP · 2022</em><span class="exit-go">OUVIR ↗</span></span>
+                </span>
+              </a>
+              <div class="legs" style="--leg:4vh"><i></i><i></i></div>
+            </li>
+            <li class="obj exit" data-reveal="swing">
+              <a href="https://open.spotify.com/album/6Cg0ULHHKTsJo7GlEfPKrF" target="_blank" rel="noopener">
+                <span class="exit-tab">SAÍDA 2025</span>
+                <span class="exit-face">
+                  <img src="../assets/cover-off.jpg" alt="Capa do single OFF!" width="640" height="640" loading="lazy">
+                  <span class="exit-txt"><strong>OFF!</strong><em>SINGLE · 13.11.2025</em><span class="exit-go">OUVIR ↗</span></span>
+                </span>
+              </a>
+              <div class="legs" style="--leg:10vh"><i></i><i></i></div>
+            </li>
+            <li class="obj exit" data-reveal="swing">
+              <a href="https://open.spotify.com/album/5jJ1py37M3i7qaZgkOOf4V" target="_blank" rel="noopener">
+                <span class="exit-tab">SAÍDA 2026</span>
+                <span class="exit-face">
+                  <img src="../assets/cover-mergulhar.jpg" alt="Capa do single MERGULHAR" width="640" height="640" loading="lazy">
+                  <span class="exit-txt"><strong>MERGULHAR</strong><em>SINGLE · 2026</em><span class="exit-go">OUVIR ↗</span></span>
+                </span>
+              </a>
+              <div class="legs" style="--leg:6vh"><i></i><i></i></div>
+            </li>
+            <li class="obj exit exit--now" data-reveal="swing">
+              <a href="https://open.spotify.com/album/7EM81z5ydGQq04ZbkIE5aS" target="_blank" rel="noopener">
+                <span class="exit-tab">VOCÊ ESTÁ AQUI · 2026</span>
+                <span class="exit-face">
+                  <img src="../assets/cover-anti-raso.jpg" alt="Capa do EP ANTI-RASO" width="640" height="640" loading="lazy">
+                  <span class="exit-txt"><strong>ANTI-RASO</strong><em>EP · 30.07.2026</em><span class="exit-go">OUVIR ↗</span></span>
+                </span>
+              </a>
+              <div class="legs" style="--leg:13vh"><i></i><i></i></div>
+            </li>
+          </ol>
+        </div>
+      </section>
+
+      <!-- ===== 05 — DRIVE-IN ===== -->
+      <section class="panel panel--video" id="video" style="--w:135" aria-labelledby="t-video">
+        <div class="scene">
+          <div class="obj marquee-sign" data-reveal="swing">
+            <div class="ms-face">
+              <p class="ms-top">DRIVE-IN</p>
+              <h2 id="t-video" class="ms-title">CINE HORNEY</h2>
+              <ul class="ms-board">
+                <li>HOJE: FOOL'S GAME</li>
+                <li>DIR. RIQUE DUARTE · 2022</li>
+                <li>+ HORNEY AO VIVO · 38s</li>
+              </ul>
+            </div>
+            <div class="legs" style="--leg:14vh"><i></i><i></i></div>
+          </div>
+
+          <div class="obj screen-wrap" data-reveal="rise">
+            <div class="screen">
+              <button class="facade" type="button" data-yt="9uP1P11at9M" data-title="HORNEY — Fool's Game (clipe oficial)">
+                <img src="../assets/yt-fools-game.jpg" alt="" width="1280" height="720" loading="lazy">
+                <span class="play" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></span>
+                <span class="facade-cap">▶ FOOL'S GAME <small>clipe oficial · dir. Rique Duarte</small></span>
+              </button>
+            </div>
+            <div class="scaffold" aria-hidden="true"></div>
+          </div>
+
+          <div class="obj screen-wrap screen-wrap--small" data-reveal="rise">
+            <div class="screen">
+              <button class="facade" type="button" data-yt="V9Rpgtc2vTs" data-title="HORNEY ao vivo (38s)">
+                <img src="../assets/yt-live.jpg" alt="" width="1280" height="720" loading="lazy">
+                <span class="play" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></span>
+                <span class="facade-cap">▶ AO VIVO <small>38s de barulho</small></span>
+              </button>
+            </div>
+            <div class="scaffold" aria-hidden="true"></div>
+            <a class="yt-link" href="https://www.youtube.com/@bandaHorney" target="_blank" rel="noopener">mais no YouTube ↗</a>
+          </div>
+
+          <svg class="cars" viewBox="0 0 900 70" preserveAspectRatio="xMidYMax meet" aria-hidden="true">
+            <g fill="#121218">
+              <path d="M20 66 V48 Q22 40 34 38 L70 36 Q86 20 110 20 H150 Q170 20 184 36 L214 40 Q226 42 226 52 V66 Z"/>
+              <path d="M330 66 V46 Q332 38 346 36 L380 34 Q394 16 420 16 H466 Q488 16 500 34 L534 38 Q546 40 546 52 V66 Z"/>
+              <path d="M650 66 V50 Q652 42 664 40 L698 38 Q712 24 734 24 H770 Q788 24 800 38 L830 42 Q842 44 842 54 V66 Z"/>
+            </g>
+            <g class="car-lights" fill="#ff3348"><rect x="20" y="46" width="6" height="5"/><rect x="330" y="44" width="6" height="5"/><rect x="650" y="48" width="6" height="5"/></g>
+          </svg>
+        </div>
+      </section>
+
+      <!-- ===== 06 — SHOWS ===== -->
+      <section class="panel panel--shows" id="shows" style="--w:170" aria-labelledby="t-shows">
+        <div class="scene">
+          <div class="obj crowd-bb" data-reveal="rise">
+            <div class="crowd-face">
+              <img src="../assets/live-crowd.jpg" alt="Duda de costas no palco diante de uma plateia lotada" width="1366" height="768" loading="lazy">
+              <div class="crowd-copy">
+                <h2 id="t-shows">SHOWS</h2>
+                <p>SAI DE CASA E COLE NOS SHOWS!!! <span aria-hidden="true">⚡️😈</span></p>
+              </div>
+            </div>
+            <div class="legs" style="--leg:8vh"><i></i><i></i></div>
+          </div>
+
+          <ol class="gigs">
+            <li class="obj gig is-past" data-show-date="2026-09-17" data-reveal="swing">
+              <div class="gig-sign">
+                <span class="exit-tab">17 SET 2026</span>
+                <div class="gig-face">
+                  <p class="gig-city">SÃO PAULO <small>SP</small></p>
+                  <p class="gig-venue">ROCK NIGHT @ FFFRONT</p>
+                  <p class="gig-with">c/ MASTROBISO</p>
+                  <p class="gig-status" data-status>JÁ ROLOU</p>
+                </div>
+                <span class="strike" aria-hidden="true"><i></i><i></i><em>JÁ ROLOU</em></span>
+              </div>
+              <div class="gig-legs">
+                <div class="legs" style="--leg:12vh"><i></i><i></i></div>
+                <span class="km-post" aria-hidden="true">KM<br>530</span>
+              </div>
+            </li>
+
+            <li class="obj flyer-pole" data-reveal="swing">
+              <a class="flyer" href="https://www.instagram.com/horney.band/" target="_blank" rel="noopener">
+                <img src="../assets/sympla-rock-night.jpg" alt="Flyer do Rock Night no FFFront, São Paulo, com HORNEY e Mastrobiso" width="1179" height="662" loading="lazy">
+              </a>
+              <span class="pole" aria-hidden="true"></span>
+            </li>
+
+            <li class="obj gig is-past" data-show-date="2026-10-03" data-reveal="swing">
+              <div class="gig-sign">
+                <span class="exit-tab">03 OUT 2026</span>
+                <div class="gig-face">
+                  <p class="gig-city">SHOW</p>
+                  <p class="gig-venue">PARADA FEITA</p>
+                  <p class="gig-with">quem foi, foi 😈</p>
+                  <p class="gig-status" data-status>JÁ ROLOU</p>
+                </div>
+                <span class="strike" aria-hidden="true"><i></i><i></i><em>JÁ ROLOU</em></span>
+              </div>
+              <div class="gig-legs">
+                <div class="legs" style="--leg:6vh"><i></i><i></i></div>
+                <span class="km-post" aria-hidden="true">KM<br>545</span>
+              </div>
+            </li>
+
+            <li class="obj gig gig--last" data-show-date="2026-10-09" data-reveal="swing">
+              <div class="gig-sign">
+                <span class="exit-tab">09 OUT 2026</span>
+                <div class="gig-face">
+                  <p class="gig-city">ÚLTIMO SHOW DO ANO</p>
+                  <p class="gig-venue">LOCAL EM BREVE</p>
+                  <p class="gig-with"><a href="https://www.instagram.com/horney.band/" target="_blank" rel="noopener">o local sai no insta ↗</a></p>
+                  <p class="gig-status" data-status>PRÓXIMA PARADA</p>
+                </div>
+                <span class="strike" aria-hidden="true"><i></i><i></i><em>JÁ ROLOU</em></span>
+              </div>
+              <div class="arrowboard" aria-hidden="true"><i></i><i></i><i></i></div>
+              <div class="gig-legs">
+                <div class="legs" style="--leg:4vh"><i></i><i></i></div>
+                <span class="km-post" aria-hidden="true">KM<br>560</span>
+              </div>
+            </li>
+          </ol>
+
+          <p class="gig-note">Não viu sua cidade? <a href="https://ig.me/m/horney.band" target="_blank" rel="noopener">Chama a gente na DM</a> que a van vai.</p>
+        </div>
+      </section>
+
+      <!-- ===== 07 — POSTO (merch) ===== -->
+      <section class="panel panel--merch" id="merch" style="--w:150" aria-labelledby="t-merch">
+        <div class="scene">
+          <div class="canopy" aria-hidden="true">
+            <span class="canopy-neon">POSTO H◎RNEY</span>
+            <span class="canopy-24">24H ⚡</span>
+          </div>
+          <i class="pillar pillar--l" aria-hidden="true"></i>
+          <i class="pillar pillar--r" aria-hidden="true"></i>
+
+          <div class="obj priceboard" data-reveal="swing">
+            <div class="pb-face">
+              <h2 id="t-merch" class="pb-title">MERCH<span>PREÇOS DO DIA</span></h2>
+              <ul>
+                <li><span>CAMISETA OLHO</span><b>EM BREVE</b></li>
+                <li><span>CAMISETA ANTI-RASO</span><b>EM BREVE</b></li>
+                <li><span>ECOBAG</span><b>EM BREVE</b></li>
+                <li><span>KIT ADESIVOS</span><b>EM BREVE</b></li>
+              </ul>
+            </div>
+            <div class="legs" style="--leg:6vh"><i></i></div>
+          </div>
+
+          <ul class="pumps">
+            <li class="obj pump" data-reveal="rise">
+              <p class="pump-top"><span>01</span>CAMISETA OLHO</p>
+              <p class="pump-lcd">EM BREVE</p>
+              <div class="pump-prod"><span class="tee tee--black"><img src="../assets/eye.png" alt="" loading="lazy"></span></div>
+              <p class="pump-desc">preta, olho-sol no peito</p>
+              <i class="hose" aria-hidden="true"></i>
+            </li>
+            <li class="obj pump" data-reveal="rise">
+              <p class="pump-top"><span>02</span>CAMISETA ANTI-RASO</p>
+              <p class="pump-lcd">EM BREVE</p>
+              <div class="pump-prod"><span class="tee tee--mag"><img src="../assets/cover-anti-raso.jpg" alt="" loading="lazy"></span></div>
+              <p class="pump-desc">capa do EP, estampa grande</p>
+              <i class="hose" aria-hidden="true"></i>
+            </li>
+            <li class="obj pump" data-reveal="rise">
+              <p class="pump-top"><span>03</span>ECOBAG</p>
+              <p class="pump-lcd">EM BREVE</p>
+              <div class="pump-prod"><span class="bag"><img src="../assets/logo-wordmark.png" alt="" loading="lazy"></span></div>
+              <p class="pump-desc">cru, logo amarelo</p>
+              <i class="hose" aria-hidden="true"></i>
+            </li>
+            <li class="obj pump" data-reveal="rise">
+              <p class="pump-top"><span>04</span>KIT ADESIVOS</p>
+              <p class="pump-lcd">EM BREVE</p>
+              <div class="pump-prod stickers"><span class="stk stk--a"><img src="../assets/eye.png" alt="" loading="lazy"></span><span class="stk stk--b">ANTI<br>RASO</span><span class="stk stk--c">H◎</span></div>
+              <p class="pump-desc">pra colar no case</p>
+              <i class="hose" aria-hidden="true"></i>
+            </li>
+          </ul>
+
+          <div class="obj shop" data-reveal="rise">
+            <p class="shop-sign">CONVENIÊNCIA</p>
+            <div class="shop-window">
+              <p>Merch saindo do forno. Quer garantir a sua antes de todo mundo?</p>
+              <a class="btn btn--neon" href="https://ig.me/m/horney.band" target="_blank" rel="noopener">RESERVA NA DM ⚡</a>
+              <small>sem checkout, sem robô: fala direto com a banda.</small>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== 08 — DESTINO (redes) ===== -->
+      <section class="panel panel--end" id="redes" style="--w:100" aria-labelledby="t-redes">
+        <svg class="skyline" viewBox="0 0 1200 220" preserveAspectRatio="xMidYMax slice" aria-hidden="true">
+          <g fill="#0b0b1d">
+            <rect x="0" y="120" width="80" height="100"/><rect x="84" y="80" width="54" height="140"/><rect x="142" y="140" width="90" height="80"/>
+            <rect x="236" y="60" width="44" height="160"/><rect x="284" y="110" width="76" height="110"/><rect x="364" y="30" width="40" height="190"/>
+            <rect x="408" y="130" width="96" height="90"/><rect x="508" y="90" width="58" height="130"/><rect x="570" y="150" width="70" height="70"/>
+            <rect x="644" y="70" width="50" height="150"/><rect x="698" y="120" width="88" height="100"/><rect x="790" y="40" width="46" height="180"/>
+            <rect x="840" y="100" width="70" height="120"/><rect x="914" y="140" width="80" height="80"/><rect x="998" y="70" width="52" height="150"/>
+            <rect x="1054" y="120" width="70" height="100"/><rect x="1128" y="90" width="72" height="130"/>
+          </g>
+          <g class="skyline-win" fill="#ffcf5a">
+            <rect x="96" y="96" width="8" height="8"/><rect x="116" y="130" width="8" height="8"/><rect x="250" y="80" width="8" height="8"/><rect x="262" y="150" width="8" height="8"/>
+            <rect x="376" y="50" width="6" height="8"/><rect x="386" y="110" width="6" height="8"/><rect x="520" y="110" width="8" height="8"/><rect x="540" y="160" width="8" height="8"/>
+            <rect x="656" y="90" width="8" height="8"/><rect x="672" y="140" width="8" height="8"/><rect x="802" y="60" width="6" height="8"/><rect x="814" y="130" width="6" height="8"/>
+            <rect x="1010" y="90" width="8" height="8"/><rect x="1030" y="150" width="8" height="8"/><rect x="1144" y="110" width="8" height="8"/>
+          </g>
+        </svg>
+        <div class="scene">
+          <div class="end-wrap">
+            <h2 id="t-redes" class="neon-title"><span>FIM DA ESTRADA</span><small>(por enquanto)</small></h2>
+            <p class="end-lead">A van estaciona aqui, mas a conversa continua. Segue a HORNEY:</p>
+            <ul class="socials">
+              <li><a href="https://www.instagram.com/horney.band/" target="_blank" rel="noopener"><img src="../assets/insta.png" alt="" width="28" height="28">Instagram <small>7.3K</small></a></li>
+              <li><a href="https://open.spotify.com/artist/5zJVmieIGGEeOKbIrXmhZi" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="#1ed760"/><path d="M6.5 9.2c3.8-1.1 8-.8 11 1M7 12.4c3.2-.9 6.6-.6 9.3.9M7.6 15.4c2.6-.6 5.2-.4 7.3.7" stroke="#0c0c10" stroke-width="1.7" fill="none" stroke-linecap="round"/></svg>Spotify <small>1.8K/mês</small></a></li>
+              <li><a href="https://www.youtube.com/@bandaHorney" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="1" y="4" width="22" height="16" rx="5" fill="#ff1f1f"/><path d="M10 8.5v7l6-3.5z" fill="#fff"/></svg>YouTube</a></li>
+              <li><a href="https://www.tiktok.com/@horney.band" target="_blank" rel="noopener"><img src="../assets/tiktok.png" alt="" width="28" height="28">TikTok</a></li>
+              <li><a href="https://www.threads.com/@horney.band" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="1" y="1" width="22" height="22" rx="6" fill="#f3efe3"/><text x="12" y="17" text-anchor="middle" font-family="Overpass, sans-serif" font-weight="900" font-size="15" fill="#0c0c10">@</text></svg>Threads</a></li>
+              <li><a href="https://ps.algohits.com/horney-anti-raso" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="#FF2BD6"/><path d="M13 4 7 13h4l-1 7 6-9h-4z" fill="#0c0c10"/></svg>Pre-save &amp; links</a></li>
+            </ul>
+            <div class="end-foot">
+              <a class="btn btn--ghost" href="#partida">↺ VOLTAR PRO KM 0</a>
+              <p>© 2026 HORNEY · Joinville/SC → onde tiver palco.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- Road + van (decorative) -->
+    <div class="road" aria-hidden="true">
+      <span class="road-edge road-edge--top"></span>
+      <span class="road-dash"></span>
+      <span class="road-edge road-edge--bot"></span>
+    </div>
+
+    <div class="van" aria-hidden="true">
+      <span class="beam"></span>
+      <span class="puffs"><i></i><i></i><i></i></span>
+      <div class="van-body">
+        <svg class="van-svg" viewBox="0 0 340 190">
+          <defs>
+            <clipPath id="vanClip"><path d="M24 56 Q24 32 48 32 H258 Q300 32 314 78 L320 136 Q321 150 306 150 H34 Q22 150 22 138 Z"/></clipPath>
+            <linearGradient id="glassGrad" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#3b5c8f"/><stop offset=".55" stop-color="#16213d"/><stop offset="1" stop-color="#0b1022"/>
+            </linearGradient>
+          </defs>
+          <!-- roof rack + gear -->
+          <rect x="62" y="24" width="190" height="5" rx="2" fill="#1a1a1a"/>
+          <rect x="74" y="27" width="5" height="8" fill="#1a1a1a"/><rect x="236" y="27" width="5" height="8" fill="#1a1a1a"/>
+          <rect x="82" y="6" width="66" height="19" rx="3" fill="#202024" stroke="#0c0c10" stroke-width="2"/>
+          <rect x="90" y="12" width="50" height="3" fill="#F2A900"/>
+          <path d="M158 22 Q158 10 172 10 L200 12 Q208 6 222 6 Q244 6 246 15 Q244 24 222 24 L172 24 Q158 24 158 22Z" fill="#3a2614" stroke="#0c0c10" stroke-width="2"/>
+          <!-- body two-tone -->
+          <g clip-path="url(#vanClip)">
+            <rect x="0" y="0" width="340" height="98" fill="#f3efe3"/>
+            <rect x="0" y="98" width="340" height="80" fill="#F2A900"/>
+            <path d="M226 98 Q268 98 300 70 L340 70 L340 98Z" fill="#F2A900"/>
+            <rect x="0" y="96" width="340" height="4" fill="#0c0c10"/>
+          </g>
+          <path d="M24 56 Q24 32 48 32 H258 Q300 32 314 78 L320 136 Q321 150 306 150 H34 Q22 150 22 138 Z" fill="none" stroke="#0c0c10" stroke-width="4" stroke-linejoin="round"/>
+          <!-- windows -->
+          <g fill="url(#glassGrad)" stroke="#0c0c10" stroke-width="3">
+            <rect x="40" y="44" width="42" height="40" rx="7"/>
+            <rect x="90" y="44" width="42" height="40" rx="7"/>
+            <rect x="140" y="44" width="42" height="40" rx="7"/>
+            <rect x="190" y="44" width="42" height="40" rx="7"/>
+            <path d="M242 44 H262 Q292 46 302 84 H242 Z"/>
+          </g>
+          <path d="M48 50 l12 0 -16 22z M98 50 l12 0 -16 22z M148 50 l12 0 -16 22z M198 50 l12 0 -16 22z M250 50 l10 0 -12 18z" fill="#fff" opacity=".35"/>
+          <!-- emblem -->
+          <circle cx="120" cy="124" r="20" fill="#F2A900" stroke="#0c0c10" stroke-width="3"/>
+          <image href="../assets/eye.png" x="94" y="98" width="52" height="52"/>
+          <text x="150" y="132" font-family="Anton, Impact, sans-serif" font-size="22" letter-spacing="1" fill="#0c0c10">H◎RNEY</text>
+          <rect x="212" y="112" width="12" height="4" rx="2" fill="#0c0c10"/>
+          <!-- lights -->
+          <circle class="hl" cx="312" cy="112" r="7" fill="#fff4b8" stroke="#0c0c10" stroke-width="2"/>
+          <rect class="tl" x="20" y="104" width="7" height="16" rx="2" fill="#e3262f" stroke="#0c0c10" stroke-width="2"/>
+          <!-- bumpers -->
+          <rect x="12" y="146" width="316" height="9" rx="4" fill="#d6d3cc" stroke="#0c0c10" stroke-width="2"/>
+          <!-- wheel arches -->
+          <circle cx="86" cy="152" r="30" fill="#1a1a1e"/>
+          <circle cx="262" cy="152" r="30" fill="#1a1a1e"/>
+          <!-- wheels -->
+          <g class="wheel">
+            <circle cx="86" cy="158" r="25" fill="#111"/>
+            <circle cx="86" cy="158" r="14" fill="#c9c6bf"/>
+            <path d="M86 145 V171 M73 158 H99 M77 149 L95 167 M95 149 L77 167" stroke="#555" stroke-width="2.5"/>
+            <circle cx="86" cy="158" r="5" fill="#F2A900" stroke="#111" stroke-width="2"/>
+          </g>
+          <g class="wheel">
+            <circle cx="262" cy="158" r="25" fill="#111"/>
+            <circle cx="262" cy="158" r="14" fill="#c9c6bf"/>
+            <path d="M262 145 V171 M249 158 H275 M253 149 L271 167 M271 149 L253 167" stroke="#555" stroke-width="2.5"/>
+            <circle cx="262" cy="158" r="5" fill="#F2A900" stroke="#111" stroke-width="2"/>
+          </g>
+        </svg>
+      </div>
+    </div>
+  </main>
+  </div>
+</body>
+</html>
