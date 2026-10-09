@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>HORNEY — 12 concepts</title>
+<link rel="icon" type="image/png" href="assets/eye.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet" />
+<style>
+  :root { --y: #f2a900; --bg: #0b0b0b; --fg: #f3efe6; --muted: #8a857c; --line: #262421; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--fg); font: 15px/1.5 "JetBrains Mono", ui-monospace, monospace; min-height: 100vh; }
+  body::after { content: ""; position: fixed; inset: 0; pointer-events: none; opacity: .07;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
+  header { padding: clamp(24px, 5vw, 64px) clamp(16px, 4vw, 48px) 24px; display: grid; gap: 20px; border-bottom: 1px solid var(--line); }
+  header img { width: min(520px, 80vw); height: auto; }
+  header p { color: var(--muted); max-width: 70ch; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
+  .legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; margin-right: 6px; background: currentColor; vertical-align: -1px; }
+  .mild { color: #7fd1a8; } .bold { color: var(--y); } .wild { color: #ff4d6d; }
+  main { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr)); gap: 1px; background: var(--line); border-bottom: 1px solid var(--line); }
+  a.card { display: grid; grid-template-rows: auto 1fr; background: var(--bg); color: inherit; text-decoration: none; position: relative; overflow: hidden; }
+  .thumb { aspect-ratio: 16 / 10; background: #151412 url("assets/eye.png") center / 30% no-repeat; overflow: hidden; }
+  .thumb img { width: 100%; height: 100%; object-fit: cover; object-position: top; display: block; transition: transform .6s cubic-bezier(.2,.7,.2,1), filter .4s; filter: saturate(.85); }
+  .meta { padding: 18px 20px 22px; display: grid; gap: 6px; }
+  .num { font: 400 44px/1 Anton, Impact, sans-serif; color: var(--y); }
+  h2 { font: 400 26px/1.05 Anton, Impact, sans-serif; letter-spacing: .02em; text-transform: uppercase; }
+  .tag { font-size: 11px; text-transform: uppercase; letter-spacing: .1em; }
+  .meta p { color: var(--muted); font-size: 13px; }
+  a.card:hover .thumb img, a.card:focus-visible .thumb img { transform: scale(1.04); filter: saturate(1.1); }
+  a.card:focus-visible { outline: 3px solid var(--y); outline-offset: -3px; }
+  footer { padding: 32px clamp(16px, 4vw, 48px); color: var(--muted); font-size: 12px; }
+  footer a { color: var(--y); }
+  @media (prefers-reduced-motion: reduce) { .thumb img { transition: none; } }
+</style>
+</head>
+<body>
+<header>
+  <img src="assets/logo-wordmark.png" alt="HORNEY" width="1200" height="519" />
+  <p>12 propostas de redesign para horney.band.</p>
+  <div class="legend"><span class="mild">Mild — redesign, mesma estrutura</span><span class="bold">Bold — nova narrativa</span><span class="wild">Wild — outra forma de experiência</span></div>
+</header>
+<main id="grid"></main>
+<footer>Conteúdo: ANTI-RASO (2026), OFF!, MERGULHAR, Four Rooms for Four Fools · <a href="https://www.instagram.com/horney.band/">@horney.band</a> · <a href="../">site atual</a></footer>
+<script>
+  const concepts = [
+    ["01-refresh", "Refresh", "mild", "A estrutura atual, polida: nav fixa, vídeo hero, seções reais, grão e amarelo."],
+    ["02-gig-poster", "Gig Poster Wall", "mild", "Flyers xerox colados no muro; cada seção bate na parede ao rolar."],
+    ["03-editorial", "Editorial Label", "mild", "Grid suíço, tipografia gigante, layout de revista de selo em 2026."],
+    ["04-hybrid-sketchbook", "Hybrid Sketchbook", "bold", "Caderno estilo Hybrid Theory: rabiscos SVG que se desenham ao rolar, stencil e spray."],
+    ["05-darkroom", "Darkroom", "bold", "White Pony sob luz vermelha: fotos se revelam conforme você rola."],
+    ["06-arena", "Arena", "bold", "Rock de estádio: marquees gigantes, holofotes no cursor, ingressos destacáveis."],
+    ["07-vhs-channels", "Channel Surf", "wild", "O site é uma TV CRT: troque de canal para navegar entre as seções."],
+    ["08-myspace", "MySpace 2004 Reboot", "wild", "O perfil do MySpace da HORNEY, com Top 8, player e skins."],
+    ["09-eye-webgl", "The Eye", "wild", "Íris em WebGL que segue o cursor; o scroll mergulha dentro da pupila."],
+    ["10-road-trip", "Road Trip", "wild", "Scroll horizontal pela estrada de Joinville: outdoors, placas e van."],
+    ["11-pedalboard", "Pedalboard", "wild", "Pedais são a navegação; knobs distorcem a página e o som."],
+    ["12-burned-cd", "Burned CD-R / Winamp", "wild", "Desktop de 2003: CD gravado, player Winamp e janelas arrastáveis."],
+  ];
+  const grid = document.getElementById("grid");
+  for (const [slug, name, tier, desc] of concepts) {
+    const a = document.createElement("a");
+    a.className = "card";
+    a.href = `${slug}/index.html`;
+    a.innerHTML = `<div class="thumb"><img loading="lazy" src="${slug}/preview.jpg" alt="Preview ${name}" onerror="this.remove()"></div>
+      <div class="meta"><span class="num">${slug.slice(0, 2)}</span><h2>${name}</h2>
+      <span class="tag ${tier}">${tier}</span><p>${desc}</p></div>`;
+    grid.append(a);
+  }
+</script>
+</body>
+</html>

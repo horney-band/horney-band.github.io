@@ -1,0 +1,433 @@
+<!--
+  HORNEY — Concept 01 · REFRESH
+  ─────────────────────────────────────────────────────────────────────────────
+  Rationale: the conservative, "ship it tomorrow" redesign. It keeps everything
+  fans already know from horney.band — logo top-left, the MERCH / DATES /
+  RELEASE / TOUR nav, a YouTube video as the hero, Instagram + TikTok in the
+  footer — and turns it into a finished single-page site. Black and the
+  logo's yellow-orange carry the identity; the ANTI-RASO block borrows the
+  EP's magenta/electric-blue as a local accent, so the release feels like an
+  event without breaking the system. Type does the heavy lifting (Anton
+  poster caps + Archivo + JetBrains Mono for gig-flyer metadata), with a
+  xerox-grain layer for the 2000s alt-rock texture. Motion stays restrained.
+
+  Techniques:
+  - Sticky header that compacts on scroll; nav links smooth-scroll (CSS
+    scroll-behavior + scroll-margin) to real sections; scrollspy via
+    IntersectionObserver sets aria-current; accessible mobile menu
+    (aria-expanded, Esc to close, focus return).
+  - YouTube facade pattern (thumbnail button → youtube-nocookie iframe on click)
+    for the hero video and the live clip; lazy Spotify embed.
+  - Date-aware shows list: JS compares each show's ISO date with today and
+    marks PASSADO / HOJE / PRÓXIMO; the hero "next show" card is derived from it.
+  - IntersectionObserver fade/slide reveals with per-element stagger; header
+    logo hands off from the giant hero wordmark.
+  - Pre-rendered noise-tile grain overlay (stepped jitter), CSS marquee ticker,
+    inline-SVG merch mockups that print real artwork onto tee/tote/poster shapes.
+  - prefers-reduced-motion: no smooth scroll, no reveals/marquee/grain jitter,
+    no autoplaying anything. Content is fully visible without JS.
+-->
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HORNEY — ANTI-RASO · alt rock de Joinville (SC)</title>
+  <meta name="description" content="HORNEY: alt/indie rock de Joinville (SC). Novo EP ANTI-RASO fora agora. Shows, vídeos, merch e redes.">
+  <meta name="theme-color" content="#0a0a0a">
+  <link rel="icon" type="image/png" href="../assets/logo-yellow.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wdth,wght@62..125,100..900&family=JetBrains+Mono:wght@400;700&display=swap">
+  <link rel="stylesheet" href="style.css">
+  <script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+  <a class="skip" href="#main">Pular para o conteúdo</a>
+  <a class="concepts" href="../index.html">← all concepts</a>
+  <div class="grain" aria-hidden="true"></div>
+
+  <!-- ═════════════════════════ HEADER ═════════════════════════ -->
+  <header class="hdr" id="hdr">
+    <div class="hdr__in">
+      <a class="hdr__logo" href="#top" aria-label="HORNEY — voltar ao topo">
+        <img src="../assets/logo-wordmark.png" alt="" width="1200" height="519">
+      </a>
+      <button class="hdr__burger" id="burger" type="button" aria-expanded="false" aria-controls="nav" aria-label="Abrir menu">
+        <span></span><span></span>
+      </button>
+      <nav class="nav" id="nav" aria-label="Principal">
+        <ul>
+          <li><a href="#merch" data-spy="merch">MERCH</a></li>
+          <li><a href="#dates" data-spy="dates">DATES</a></li>
+          <li><a href="#release" data-spy="release">RELEASE</a></li>
+          <li><a href="#tour" data-spy="tour">TOUR</a></li>
+        </ul>
+        <a class="nav__cta" href="https://open.spotify.com/album/7EM81z5ydGQq04ZbkIE5aS" target="_blank" rel="noopener">OUVIR ANTI-RASO <span aria-hidden="true">↗</span></a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main">
+    <!-- ═════════════════════════ HERO ═════════════════════════ -->
+    <section class="hero" id="top" aria-labelledby="hero-title">
+      <div class="hero__bg" aria-hidden="true">
+        <img src="../assets/live-crowd.jpg" alt="" width="1366" height="768" fetchpriority="high">
+      </div>
+
+      <div class="wrap hero__grid">
+        <div class="hero__head">
+          <p class="eyebrow hero__eyebrow" data-reveal>Joinville · SC · Brasil <span class="dot" aria-hidden="true"></span> alt / indie rock</p>
+          <h1 id="hero-title" class="hero__logo" data-hero-logo>
+            <img src="../assets/logo-wordmark.png" alt="HORNEY" width="1200" height="519">
+          </h1>
+        </div>
+
+        <div class="hero__video" data-reveal style="--d:.15s">
+          <div class="facade" data-yt="9uP1P11at9M" data-title="HORNEY — Fool's Game (videoclipe oficial)">
+            <button class="facade__btn" type="button" aria-label="Assistir: Fool's Game — videoclipe oficial">
+              <img src="../assets/yt-fools-game.jpg" alt="" width="1280" height="720" loading="eager">
+              <span class="facade__play" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="28" height="28"><path d="M7 4.5v15l13-7.5z" fill="currentColor"/></svg>
+              </span>
+              <span class="facade__label">
+                <span class="mono">▶ PLAY · VIDEOCLIPE OFICIAL</span>
+                <strong>FOOL'S GAME</strong>
+                <span class="mono facade__meta">2022 · dir. Rique Duarte</span>
+              </span>
+            </button>
+          </div>
+        </div>
+
+        <aside class="hero__side" aria-label="Agora">
+          <div class="card card--next is-live" data-reveal style="--d:.25s">
+            <p class="eyebrow"><span class="pulse" aria-hidden="true"></span> <span data-next-kicker>Hoje</span></p>
+            <p class="card__big" data-next-date>09 OUT</p>
+            <p class="card__txt" data-next-text>Último show do ano. Local em breve — fica de olho no IG.</p>
+            <a class="link-arrow" href="#dates">Ver todas as datas <span aria-hidden="true">→</span></a>
+          </div>
+          <a class="card card--release" href="#release" data-reveal style="--d:.35s">
+            <img src="../assets/cover-anti-raso.jpg" alt="" width="640" height="640">
+            <span>
+              <span class="eyebrow">Novo EP · fora agora</span>
+              <strong>ANTI-RASO</strong>
+              <span class="mono">4 faixas · 30.07.2026</span>
+            </span>
+          </a>
+        </aside>
+      </div>
+
+      <div class="ticker" aria-hidden="true">
+        <div class="ticker__track">
+          <span>ANTI-RASO — FORA AGORA</span><i>⚡</i><span>SAI DE CASA E COLE NOS SHOWS!!!</span><i>😈</i><span>ÚLTIMO SHOW DO ANO · 09.10</span><i>⚡</i><span>MERCH EM BREVE</span><i>😈</i>
+          <span>ANTI-RASO — FORA AGORA</span><i>⚡</i><span>SAI DE CASA E COLE NOS SHOWS!!!</span><i>😈</i><span>ÚLTIMO SHOW DO ANO · 09.10</span><i>⚡</i><span>MERCH EM BREVE</span><i>😈</i>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═════════════════════════ RELEASE ═════════════════════════ -->
+    <section class="sec release" id="release" aria-labelledby="release-title">
+      <div class="wrap">
+        <header class="sec__head" data-reveal>
+          <p class="sec__num mono">01 / RELEASE</p>
+          <h2 id="release-title" class="sec__title">ANTI&#8209;RASO<span class="sec__sub">novo EP · 30.07.2026</span></h2>
+        </header>
+
+        <div class="release__grid">
+          <figure class="release__cover" data-reveal>
+            <div class="release__art">
+              <img src="../assets/cover-anti-raso.jpg" alt="Capa do EP ANTI-RASO: uma porta aberta no meio do mar, um olho gigante e raios em magenta e azul." width="640" height="640" loading="lazy">
+            </div>
+            <figcaption class="mono">HORNEY — ANTI-RASO (EP, 2026)</figcaption>
+          </figure>
+
+          <div class="release__body">
+            <blockquote class="quote" data-reveal>
+              <p>“ANTI-RASO significa mergulhar fundo nas coisas. É se recusar a viver apenas na superfície.”</p>
+              <footer class="mono">— Duda Maiolini, voz &amp; letras</footer>
+            </blockquote>
+
+            <ol class="tracks" data-reveal style="--d:.1s">
+              <li><span class="tracks__n mono">01</span><span class="tracks__t">OFF!</span></li>
+              <li><span class="tracks__n mono">02</span><span class="tracks__t">QUEBRA-CABEÇA <em>feat. Dani Buarque</em></span></li>
+              <li><span class="tracks__n mono">03</span><span class="tracks__t">MERGULHAR</span></li>
+              <li><span class="tracks__n mono">04</span><span class="tracks__t">ROMÂNTICA</span></li>
+            </ol>
+
+            <div class="release__ctas" data-reveal style="--d:.2s">
+              <a class="btn btn--hot" href="https://open.spotify.com/album/7EM81z5ydGQq04ZbkIE5aS" target="_blank" rel="noopener">Ouvir no Spotify <span aria-hidden="true">↗</span></a>
+              <a class="btn btn--ghost" href="https://ps.algohits.com/horney-anti-raso" target="_blank" rel="noopener">Todas as plataformas <span aria-hidden="true">↗</span></a>
+            </div>
+
+            <a class="press" href="https://www.unglued.com.br/reviews/anti-raso" target="_blank" rel="noopener" data-reveal style="--d:.3s">
+              <span class="press__score"><b>7.8</b><small>/10</small></span>
+              <span class="press__txt"><span class="eyebrow">Imprensa</span>Unglued resenhou o ANTI-RASO <span aria-hidden="true">↗</span></span>
+            </a>
+          </div>
+        </div>
+
+        <div class="player" data-reveal>
+          <iframe title="Spotify: HORNEY — ANTI-RASO" src="https://open.spotify.com/embed/album/7EM81z5ydGQq04ZbkIE5aS?utm_source=generator&amp;theme=0" width="100%" height="420" loading="lazy" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"></iframe>
+        </div>
+
+        <div class="disco">
+          <h3 class="disco__title mono" data-reveal>Discografia</h3>
+          <ul class="disco__list">
+            <li data-reveal>
+              <a href="https://open.spotify.com/album/7EM81z5ydGQq04ZbkIE5aS" target="_blank" rel="noopener">
+                <img src="../assets/cover-anti-raso.jpg" alt="" width="640" height="640" loading="lazy">
+                <strong>ANTI-RASO</strong><span class="mono">EP · 2026</span>
+              </a>
+            </li>
+            <li data-reveal style="--d:.08s">
+              <a href="https://open.spotify.com/album/5jJ1py37M3i7qaZgkOOf4V" target="_blank" rel="noopener">
+                <img src="../assets/cover-mergulhar.jpg" alt="" width="640" height="640" loading="lazy">
+                <strong>MERGULHAR</strong><span class="mono">Single · 2026</span>
+              </a>
+            </li>
+            <li data-reveal style="--d:.16s">
+              <a href="https://open.spotify.com/album/6Cg0ULHHKTsJo7GlEfPKrF" target="_blank" rel="noopener">
+                <img src="../assets/cover-off.jpg" alt="" width="640" height="640" loading="lazy">
+                <strong>OFF!</strong><span class="mono">Single · 13.11.2025</span>
+              </a>
+            </li>
+            <li data-reveal style="--d:.24s">
+              <a href="https://open.spotify.com/album/3m7dNgjIIiHDuZiNcu8Vhi" target="_blank" rel="noopener">
+                <img src="../assets/cover-four-rooms.jpg" alt="" width="640" height="640" loading="lazy">
+                <strong>FOUR ROOMS FOR FOUR FOOLS</strong><span class="mono">EP · 2022</span>
+              </a>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═════════════════════════ DATES ═════════════════════════ -->
+    <section class="sec dates" id="dates" aria-labelledby="dates-title">
+      <div class="wrap">
+        <header class="sec__head" data-reveal>
+          <p class="sec__num mono">02 / DATES</p>
+          <h2 id="dates-title" class="sec__title">SHOWS<span class="sec__sub">sai de casa e cole!!! ⚡️😈</span></h2>
+        </header>
+
+        <ul class="shows" id="shows">
+          <li class="show is-today" data-date="2026-10-09" data-blurb="Último show do ano. Local em breve — fica de olho no IG." data-reveal>
+            <time class="show__date" datetime="2026-10-09"><b>09</b><span>OUT<br>2026</span></time>
+            <div class="show__info">
+              <strong>ÚLTIMO SHOW DO ANO</strong>
+              <span class="mono">LOCAL EM BREVE</span>
+            </div>
+            <span class="show__status mono" data-status>HOJE</span>
+            <a class="show__cta" href="https://www.instagram.com/horney.band/" target="_blank" rel="noopener">Infos no IG <span aria-hidden="true">↗</span></a>
+          </li>
+          <li class="show is-past" data-date="2026-10-03" data-blurb="Show em 03 OUT. Fotos e infos no IG." data-reveal style="--d:.08s">
+            <time class="show__date" datetime="2026-10-03"><b>03</b><span>OUT<br>2026</span></time>
+            <div class="show__info">
+              <strong>HORNEY AO VIVO</strong>
+              <span class="mono">LOCAL NÃO INFORMADO</span>
+            </div>
+            <span class="show__status mono" data-status>PASSADO</span>
+            <a class="show__cta" href="https://www.instagram.com/horney.band/" target="_blank" rel="noopener">Fotos no IG <span aria-hidden="true">↗</span></a>
+          </li>
+          <li class="show show--flyer is-past" data-date="2026-09-17" data-blurb="Rock Night @ FFFront, São Paulo — com Mastrobiso." data-reveal style="--d:.16s">
+            <time class="show__date" datetime="2026-09-17"><b>17</b><span>SET<br>2026</span></time>
+            <div class="show__info">
+              <strong>ROCK NIGHT @ FFFRONT</strong>
+              <span class="mono">SÃO PAULO · SP — c/ MASTROBISO</span>
+            </div>
+            <span class="show__status mono" data-status>PASSADO</span>
+            <img class="show__flyer" src="../assets/sympla-rock-night.jpg" alt="Flyer do Rock Night no FFFront, São Paulo" width="1179" height="662" loading="lazy">
+            <a class="show__cta" href="https://www.instagram.com/horney.band/" target="_blank" rel="noopener">Fotos no IG <span aria-hidden="true">↗</span></a>
+          </li>
+        </ul>
+
+        <p class="dates__note" data-reveal>
+          Não viu sua cidade? Chama a gente — <a href="https://ig.me/m/horney.band" target="_blank" rel="noopener">DM no Instagram</a>. Datas novas saem primeiro lá.
+        </p>
+      </div>
+    </section>
+
+    <!-- ═════════════════════════ TOUR / LIVE ═════════════════════════ -->
+    <section class="sec tour" id="tour" aria-labelledby="tour-title">
+      <div class="wrap">
+        <header class="sec__head" data-reveal>
+          <p class="sec__num mono">03 / TOUR</p>
+          <h2 id="tour-title" class="sec__title">AO VIVO<span class="sec__sub">nem só peso, nem só melancolia</span></h2>
+        </header>
+
+        <div class="tour__grid">
+          <div class="tour__video" data-reveal>
+            <div class="facade" data-yt="V9Rpgtc2vTs" data-title="HORNEY ao vivo (clipe de 38s)">
+              <button class="facade__btn" type="button" aria-label="Assistir: HORNEY ao vivo, clipe de 38 segundos">
+                <img src="../assets/yt-live.jpg" alt="" width="1280" height="720" loading="lazy">
+                <span class="facade__play" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" width="28" height="28"><path d="M7 4.5v15l13-7.5z" fill="currentColor"/></svg>
+                </span>
+                <span class="facade__label">
+                  <span class="mono">▶ PLAY · 0:38</span>
+                  <strong>HORNEY LIVE</strong>
+                </span>
+              </button>
+            </div>
+          </div>
+
+          <div class="tour__about" data-reveal style="--d:.1s">
+            <p class="tour__lead">Quarteto de alt/indie rock de <b>Joinville (SC)</b>. Punk, hardcore e grunge com respiros de MPB — e, desde 2026, cantando em português.</p>
+            <blockquote class="tour__quote">“A Horney não é uma banda que vai tocar só rock pesado, nem uma banda que vai tocar só música melancólica.”</blockquote>
+            <dl class="lineup">
+              <div><dt class="mono">Voz &amp; letras</dt><dd>Duda Maiolini</dd></div>
+              <div><dt class="mono">Composição</dt><dd>Rafa Bello</dd></div>
+              <div><dt class="mono">+ banda</dt><dd>+2</dd></div>
+            </dl>
+            <dl class="stats">
+              <div><dt class="mono">Instagram</dt><dd>7.3K</dd></div>
+              <div><dt class="mono">Ouvintes/mês</dt><dd>1.8K</dd></div>
+            </dl>
+          </div>
+        </div>
+
+        <ul class="shots">
+          <li data-reveal><img src="../assets/ig-post-2.jpg" alt="Duda Maiolini cantando no microfone, luz vermelha, guitarrista ao fundo" width="640" height="640" loading="lazy"></li>
+          <li data-reveal style="--d:.08s"><img src="../assets/ig-post-4.jpg" alt="Guitarrista de cabelo cacheado em luz vermelha com o texto “UM RECADO IMPORTANTE”" width="640" height="640" loading="lazy"></li>
+          <li data-reveal style="--d:.16s"><img src="../assets/ig-reel-1.jpg" alt="Frame de reel do Instagram da banda" width="360" height="640" loading="lazy"></li>
+          <li data-reveal style="--d:.24s"><img src="../assets/ig-post-5.jpg" alt="Público fazendo chifrinho e sorrindo depois do show" width="640" height="640" loading="lazy"></li>
+          <li data-reveal style="--d:.32s"><img src="../assets/ig-post-1.jpg" alt="Cartaz com a banda dentro de um anel de chamas laranja" width="640" height="640" loading="lazy"></li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ═════════════════════════ MERCH ═════════════════════════ -->
+    <section class="sec merch" id="merch" aria-labelledby="merch-title">
+      <div class="wrap">
+        <header class="sec__head" data-reveal>
+          <p class="sec__num mono">04 / MERCH</p>
+          <h2 id="merch-title" class="sec__title">MERCH<span class="sec__sub">em breve — reserva na DM</span></h2>
+        </header>
+
+        <svg width="0" height="0" class="defs" aria-hidden="true" focusable="false">
+          <defs>
+            <path id="tee" d="M96 18 C110 34 190 34 204 18 L262 44 L292 106 L250 126 L238 104 L238 300 L62 300 L62 104 L50 126 L8 106 L38 44 Z"/>
+            <clipPath id="tee-clip"><use href="#tee"/></clipPath>
+          </defs>
+        </svg>
+
+        <ul class="merch__grid">
+          <li class="item" data-reveal>
+            <div class="item__stage">
+              <svg class="item__svg" viewBox="0 0 300 320" role="img" aria-label="Camiseta preta com a arte do ANTI-RASO estampada no peito">
+                <g clip-path="url(#tee-clip)">
+                  <rect width="300" height="320" fill="#141414"/>
+                  <path d="M96 18 C110 34 190 34 204 18" fill="none" stroke="#2a2a2a" stroke-width="10"/>
+                  <image href="../assets/cover-anti-raso.jpg" x="95" y="78" width="110" height="110"/>
+                </g>
+                <use href="#tee" fill="none" stroke="#2b2b2b" stroke-width="2"/>
+              </svg>
+            </div>
+            <div class="item__meta">
+              <span class="tag mono">EM BREVE</span>
+              <h3>TEE ANTI-RASO</h3>
+              <p>Preta, arte da capa no peito.</p>
+              <a class="item__cta" href="https://ig.me/m/horney.band" target="_blank" rel="noopener">Quero — DM <span aria-hidden="true">↗</span></a>
+            </div>
+          </li>
+
+          <li class="item" data-reveal style="--d:.08s">
+            <div class="item__stage item__stage--y">
+              <svg class="item__svg" viewBox="0 0 300 320" role="img" aria-label="Camiseta amarela com o olho-sol da HORNEY em preto">
+                <g clip-path="url(#tee-clip)">
+                  <rect width="300" height="320" fill="#f2a900"/>
+                  <path d="M96 18 C110 34 190 34 204 18" fill="none" stroke="#c98c00" stroke-width="10"/>
+                  <image href="../assets/eye.png" x="62" y="36" width="176" height="176"/>
+                </g>
+                <use href="#tee" fill="none" stroke="#000" stroke-opacity=".35" stroke-width="2"/>
+              </svg>
+            </div>
+            <div class="item__meta">
+              <span class="tag mono">EM BREVE</span>
+              <h3>TEE OLHO</h3>
+              <p>Amarela, o olho-sol do logo.</p>
+              <a class="item__cta" href="https://ig.me/m/horney.band" target="_blank" rel="noopener">Quero — DM <span aria-hidden="true">↗</span></a>
+            </div>
+          </li>
+
+          <li class="item" data-reveal style="--d:.16s">
+            <div class="item__stage">
+              <svg class="item__svg" viewBox="0 0 300 320" role="img" aria-label="Ecobag preta com o logo HORNEY em amarelo">
+                <path d="M110 92 C110 30 190 30 190 92" fill="none" stroke="#2c2c2c" stroke-width="12" stroke-linecap="round"/>
+                <rect x="58" y="86" width="184" height="214" rx="4" fill="#141414" stroke="#2b2b2b" stroke-width="2"/>
+                <image href="../assets/logo-wordmark.png" x="74" y="160" width="152" height="66"/>
+              </svg>
+            </div>
+            <div class="item__meta">
+              <span class="tag mono">EM BREVE</span>
+              <h3>ECOBAG LOGO</h3>
+              <p>Algodão cru tingido, logo amarelo.</p>
+              <a class="item__cta" href="https://ig.me/m/horney.band" target="_blank" rel="noopener">Quero — DM <span aria-hidden="true">↗</span></a>
+            </div>
+          </li>
+
+          <li class="item" data-reveal style="--d:.24s">
+            <div class="item__stage">
+              <svg class="item__svg" viewBox="0 0 300 320" role="img" aria-label="Pôster da arte do single OFF!">
+                <rect x="62" y="22" width="176" height="276" fill="#ece6d8"/>
+                <image href="../assets/cover-off.jpg" x="74" y="34" width="152" height="152"/>
+                <rect x="74" y="200" width="152" height="3" fill="#111"/>
+                <text x="74" y="236" fill="#111" font-family="Anton, Impact, sans-serif" font-size="30" letter-spacing="1">OFF!</text>
+                <text x="74" y="258" fill="#111" font-family="JetBrains Mono, monospace" font-size="9">HORNEY · SINGLE · 2025</text>
+                <text x="74" y="284" fill="#111" font-family="JetBrains Mono, monospace" font-size="9">A3 · TIRAGEM LIMITADA</text>
+              </svg>
+            </div>
+            <div class="item__meta">
+              <span class="tag mono">EM BREVE</span>
+              <h3>PÔSTER OFF!</h3>
+              <p>A3, tiragem limitada.</p>
+              <a class="item__cta" href="https://ig.me/m/horney.band" target="_blank" rel="noopener">Quero — DM <span aria-hidden="true">↗</span></a>
+            </div>
+          </li>
+        </ul>
+      </div>
+    </section>
+  </main>
+
+  <!-- ═════════════════════════ FOOTER ═════════════════════════ -->
+  <footer class="ftr" aria-labelledby="ftr-title">
+    <div class="wrap">
+      <div class="ftr__top">
+        <div class="ftr__eye" aria-hidden="true"><img src="../assets/eye.png" alt="" width="1024" height="1024" loading="lazy"></div>
+        <h2 id="ftr-title" class="ftr__title" data-reveal>SEGUE<br>A GENTE</h2>
+      </div>
+
+      <ul class="social">
+        <li data-reveal>
+          <a href="https://www.instagram.com/horney.band/" target="_blank" rel="noopener">
+            <img class="social__ig" src="../assets/insta.png" alt="" width="800" height="800" loading="lazy">
+            <span><strong>Instagram</strong><span class="mono">@horney.band</span></span>
+            <span class="social__arr" aria-hidden="true">↗</span>
+          </a>
+        </li>
+        <li data-reveal style="--d:.08s">
+          <a href="https://www.tiktok.com/@horney.band" target="_blank" rel="noopener">
+            <img src="../assets/tiktok.png" alt="" width="216" height="216" loading="lazy">
+            <span><strong>TikTok</strong><span class="mono">@horney.band</span></span>
+            <span class="social__arr" aria-hidden="true">↗</span>
+          </a>
+        </li>
+      </ul>
+
+      <ul class="ftr__more mono">
+        <li><a href="https://open.spotify.com/artist/5zJVmieIGGEeOKbIrXmhZi" target="_blank" rel="noopener">Spotify</a></li>
+        <li><a href="https://www.youtube.com/@bandaHorney" target="_blank" rel="noopener">YouTube</a></li>
+        <li><a href="https://www.threads.com/@horney.band" target="_blank" rel="noopener">Threads</a></li>
+        <li><a href="https://ps.algohits.com/horney-anti-raso" target="_blank" rel="noopener">Links</a></li>
+      </ul>
+
+      <div class="ftr__bottom mono">
+        <span>© <span id="year">2026</span> HORNEY · Joinville / SC</span>
+        <a href="#top">Topo ↑</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="script.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,515 @@
+<!doctype html>
+<!--
+  CONCEPT 11 — PEDALBOARD (H◎RNEY)
+
+  Rationale: HORNEY is a guitar band. Punk, grunge and MPB all reach the PA through the same thing: a
+  floor full of stompboxes wired together with patch cables. So the site is a rehearsal room. An amp head
+  on the wall carries the logo and master controls, and a pedalboard sits on the carpet below it. Every
+  pedal is one section: FUZZ = Música, DELAY = Vídeo, TUNER = Shows, LOOPER = Merch, WAH = Social.
+  Stomping a pedal lights its LED, kicks the cables, thumps the amp and opens that section's panel in the
+  rack below. The knobs are real controls. They bend the page through SVG displacement, hue, echo ghosts,
+  glitch slices and a wah colour sweep, and once you switch the sound on they also shape a synthesised
+  power chord. Each pedal plays its own note through a WaveShaper distortion. The site feels like a
+  toy you play with, then hands you facts, embeds and links.
+
+  Techniques:
+  - SVG feTurbulence + feDisplacementMap filter ("GAIN"), driven by knobs (static between knob changes, never animated).
+    The filter is applied through one CSS custom property (--fx) to small decorative imagery only (the backdrop gets color filters),
+    so body text stays legible.
+  - CSS custom-property FX bus: --echo/--echoa (DELAY ghosts via stacked text-shadow/box-shadow),
+    --gs/--gx (chromatic glitch split + clip-path slice bursts), --wah (soft-light magenta→blue wash).
+  - Web Audio: detuned sawtooth power chords + pick-noise transient → pre-gain → tanh WaveShaper (4x
+    oversample) → tone low-pass → peaking "wah" → cab low-pass → feedback delay → compressor. Muted by
+    default; the AudioContext is only created after the user switches the SOM toggle.
+  - Accessible knobs: role="slider" with pointer-capture drag, wheel, arrow/PageUp/Home/End keys,
+    aria-valuenow/valuetext and double-click reset. Footswitches are real <button aria-pressed>. Keys 1–5 stomp.
+  - SVG patch cables with three stroke layers. They are recomputed from the live layout (ResizeObserver)
+    and wobble with spring-decay impulses on every stomp. The rAF loop pauses off-screen via IntersectionObserver.
+  - Container queries (cqi) scale every pedal from 375px to 1440px. CSS-only enclosures, screws, LEDs, grille cloth.
+  - YouTube facades (click-to-load iframes that are torn down when you leave the panel). Lazy Spotify embed.
+  - Progressive enhancement: without JS every panel is visible as a plain long page.
+  - prefers-reduced-motion: no wobble, boil, glitch bursts or stomp/panel animations. Static visuals remain.
+-->
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>H◎RNEY — Pedalboard · alt rock de Joinville (SC)</title>
+  <meta name="description" content="HORNEY: quarteto de alt/indie rock de Joinville (SC). ANTI-RASO, o EP novo, já está fora. Pisa nos pedais: música, vídeo, shows, merch e redes.">
+  <meta name="theme-color" content="#0b0a09">
+  <link rel="icon" href="../assets/eye.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wdth,wght@62..125,100..900&family=JetBrains+Mono:wght@400;700&family=Permanent+Marker&display=swap">
+  <link rel="stylesheet" href="style.css">
+  <script>document.documentElement.classList.add('js');</script>
+  <script src="script.js" defer></script>
+</head>
+<body>
+  <a class="skip" href="#rack">Pular pro conteúdo</a>
+  <a class="all-concepts" href="../index.html">← all concepts</a>
+
+  <!-- FX bus: the GAIN knob drives this filter -->
+  <svg class="defs" aria-hidden="true" focusable="false" width="0" height="0">
+    <filter id="fx-drive" x="-6%" y="-6%" width="112%" height="112%" color-interpolation-filters="sRGB">
+      <feTurbulence id="fx-turb" type="fractalNoise" baseFrequency="0.009 0.02" numOctaves="2" seed="3" result="noise"/>
+      <feDisplacementMap id="fx-disp" in="SourceGraphic" in2="noise" scale="0" xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
+  </svg>
+
+  <!-- ============ ROOM / AMP HEAD ============ -->
+  <header class="room" id="top">
+    <div class="room__wall" aria-hidden="true">
+      <img class="fx gl" src="../assets/live-crowd.jpg" alt="" width="1366" height="768" fetchpriority="high">
+    </div>
+
+    <div class="amp" id="amp">
+      <span class="amp__handle" aria-hidden="true"></span>
+      <div class="amp__panel">
+        <p class="amp__brand">H◎RNEY <small>AR-26 · ALT ROCK AMPLIFICATION · JOINVILLE/SC</small></p>
+
+        <nav class="amp__nav" aria-label="Seções">
+          <a href="#musica"><i aria-hidden="true"></i><span>1</span> MÚSICA</a>
+          <a href="#video"><i aria-hidden="true"></i><span>2</span> VÍDEO</a>
+          <a href="#shows"><i aria-hidden="true"></i><span>3</span> SHOWS</a>
+          <a href="#merch"><i aria-hidden="true"></i><span>4</span> MERCH</a>
+          <a href="#social"><i aria-hidden="true"></i><span>5</span> SOCIAL</a>
+        </nav>
+
+        <div class="amp__controls">
+          <div class="knob-wrap knob-wrap--amp">
+            <div class="knob" role="slider" tabindex="0" data-param="vol" aria-label="Volume master do som" aria-valuemin="0" aria-valuemax="100" aria-valuenow="60"><i></i></div>
+            <span class="knob-label">VOL</span>
+          </div>
+          <button class="switch" id="sound-toggle" type="button" aria-pressed="false">
+            <span class="switch__lever" aria-hidden="true"></span>
+            <span class="switch__label">SOM <b>OFF</b></span>
+          </button>
+          <button class="bypass" id="bypass" type="button" title="Zera todos os efeitos visuais">TRUE<br>BYPASS</button>
+          <span class="jewel" aria-hidden="true"></span>
+        </div>
+      </div>
+
+      <div class="amp__grille">
+        <h1 class="amp__logo">
+          <img class="fx gl" src="../assets/logo-wordmark.png" alt="HORNEY" width="1200" height="519">
+        </h1>
+        <span class="amp__badge" aria-hidden="true">H◎</span>
+      </div>
+    </div>
+
+    <div class="room__intro">
+      <p class="kicker">ALT / INDIE ROCK · JOINVILLE (SC) · BRASIL</p>
+      <p class="lede">Punk, hardcore e grunge com uns toques de MPB. Desde 2026 cantando em <strong>português</strong>. Voz e letras: <strong>Duda Maiolini</strong>. Composição com <strong>Rafa Bello</strong>. E mais dois. <span class="nowrap">⚡️😈</span></p>
+      <blockquote class="room__quote">
+        <p>“A Horney não é uma banda que vai tocar só rock pesado, nem uma banda que vai tocar só música melancólica.”</p>
+        <cite>— Duda</cite>
+      </blockquote>
+      <div class="room__ctas">
+        <a class="sticker sticker--mag" href="#musica">ANTI-RASO · EP NOVO JÁ FORA</a>
+        <a class="sticker" href="#shows"><span id="hero-when">09.10</span> · ÚLTIMO SHOW DO ANO</a>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <!-- ============ FLOOR / PEDALBOARD ============ -->
+    <section class="floor" aria-labelledby="floor-title">
+      <h2 class="floor__title" id="floor-title">PISA NUM PEDAL <span aria-hidden="true">↓</span></h2>
+      <p class="floor__hint">Cada pedal abre uma seção. <b>Gira os knobs</b>: arrasta, usa a rodinha ou as setas do teclado, e a página distorce junto. Atalhos de teclado: <kbd>1</kbd>–<kbd>5</kbd>. O som começa desligado: liga no <b>SOM</b> lá no amp.</p>
+
+      <div class="board" id="board">
+        <svg class="cables" id="cables" aria-hidden="true" focusable="false"></svg>
+        <span class="board__label board__label--in" aria-hidden="true">← GUITARRA</span>
+        <span class="board__label board__label--out" aria-hidden="true">AMP →</span>
+
+        <div class="board__pedals">
+          <!-- 1 FUZZ -->
+          <div class="pedal pedal--fuzz" data-target="musica" data-fx="fuzz" data-note="E">
+            <span class="jack jack--l" aria-hidden="true"></span><span class="jack jack--r" aria-hidden="true"></span>
+            <div class="pedal__body">
+              <div class="pedal__knobs">
+                <div class="knob-wrap">
+                  <div class="knob" role="slider" tabindex="0" data-param="drive" aria-label="FUZZ, gain: distorce as imagens" aria-valuemin="0" aria-valuemax="100" aria-valuenow="14"><i></i></div>
+                  <span class="knob-label">GAIN</span>
+                </div>
+                <div class="knob-wrap">
+                  <div class="knob" role="slider" tabindex="0" data-param="tone" aria-label="FUZZ, tone: gira a cor" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i></i></div>
+                  <span class="knob-label">TONE</span>
+                </div>
+              </div>
+              <span class="led" aria-hidden="true"></span>
+              <p class="pedal__name">FUZZ</p>
+              <p class="pedal__sec">MÚSICA</p>
+              <button class="footswitch" type="button" aria-controls="musica" aria-pressed="false"><span class="sr">Pisar no FUZZ: abrir Música</span></button>
+              <span class="pedal__num" aria-hidden="true">1</span>
+            </div>
+          </div>
+
+          <!-- 2 DELAY -->
+          <div class="pedal pedal--delay" data-target="video" data-fx="delay" data-note="A">
+            <span class="jack jack--l" aria-hidden="true"></span><span class="jack jack--r" aria-hidden="true"></span>
+            <div class="pedal__body">
+              <div class="pedal__knobs">
+                <div class="knob-wrap">
+                  <div class="knob" role="slider" tabindex="0" data-param="time" aria-label="DELAY, time: distância dos ecos" aria-valuemin="0" aria-valuemax="100" aria-valuenow="35"><i></i></div>
+                  <span class="knob-label">TIME</span>
+                </div>
+                <div class="knob-wrap">
+                  <div class="knob" role="slider" tabindex="0" data-param="mix" aria-label="DELAY, mix: intensidade dos ecos" aria-valuemin="0" aria-valuemax="100" aria-valuenow="30"><i></i></div>
+                  <span class="knob-label">MIX</span>
+                </div>
+              </div>
+              <span class="led" aria-hidden="true"></span>
+              <p class="pedal__name">DELAY</p>
+              <p class="pedal__sec">VÍDEO</p>
+              <button class="footswitch" type="button" aria-controls="video" aria-pressed="false"><span class="sr">Pisar no DELAY: abrir Vídeo</span></button>
+              <span class="pedal__num" aria-hidden="true">2</span>
+            </div>
+          </div>
+
+          <!-- 3 TUNER -->
+          <div class="pedal pedal--tuner" data-target="shows" data-fx="tuner" data-note="A">
+            <span class="jack jack--l" aria-hidden="true"></span><span class="jack jack--r" aria-hidden="true"></span>
+            <div class="pedal__body">
+              <div class="mini-lcd" aria-hidden="true">
+                <span class="mini-lcd__note" id="tuner-note">A</span>
+                <span class="mini-lcd__bar" id="tuner-bar"><i></i></span>
+                <span class="mini-lcd__hz">440Hz</span>
+              </div>
+              <span class="led" aria-hidden="true"></span>
+              <p class="pedal__name">TUNER</p>
+              <p class="pedal__sec">SHOWS</p>
+              <button class="footswitch" type="button" aria-controls="shows" aria-pressed="false"><span class="sr">Pisar no TUNER: abrir Shows</span></button>
+              <span class="pedal__num" aria-hidden="true">3</span>
+            </div>
+          </div>
+
+          <!-- 4 LOOPER -->
+          <div class="pedal pedal--looper" data-target="merch" data-fx="looper" data-note="E">
+            <span class="jack jack--l" aria-hidden="true"></span><span class="jack jack--r" aria-hidden="true"></span>
+            <div class="pedal__body">
+              <div class="pedal__knobs pedal__knobs--one">
+                <div class="knob-wrap">
+                  <div class="knob" role="slider" tabindex="0" data-param="glitch" aria-label="LOOPER, stutter: glitch na página" aria-valuemin="0" aria-valuemax="100" aria-valuenow="10"><i></i></div>
+                  <span class="knob-label">STUTTER</span>
+                </div>
+              </div>
+              <span class="led" aria-hidden="true"></span>
+              <p class="pedal__name">LOOPER</p>
+              <p class="pedal__sec">MERCH</p>
+              <button class="footswitch" type="button" aria-controls="merch" aria-pressed="false"><span class="sr">Pisar no LOOPER: abrir Merch</span></button>
+              <span class="pedal__num" aria-hidden="true">4</span>
+            </div>
+          </div>
+
+          <!-- 5 WAH -->
+          <div class="pedal pedal--wah" data-target="social" data-fx="wah" data-note="G">
+            <span class="jack jack--l" aria-hidden="true"></span><span class="jack jack--r" aria-hidden="true"></span>
+            <div class="pedal__body">
+              <div class="treadle" role="slider" tabindex="0" data-param="wah" aria-orientation="vertical" aria-label="WAH, sweep: lavagem de cor" aria-valuemin="0" aria-valuemax="100" aria-valuenow="25">
+                <span class="treadle__grip" aria-hidden="true"></span>
+                <span class="knob-label treadle__label">SWEEP</span>
+              </div>
+              <span class="led" aria-hidden="true"></span>
+              <p class="pedal__name">WAH</p>
+              <p class="pedal__sec">SOCIAL</p>
+              <button class="footswitch" type="button" aria-controls="social" aria-pressed="false"><span class="sr">Pisar no WAH: abrir Social</span></button>
+              <span class="pedal__num" aria-hidden="true">5</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="tape-note" aria-hidden="true">
+        <p>ANTI-RASO</p>
+        <ol><li>OFF!</li><li>QUEBRA-CABEÇA</li><li>MERGULHAR</li><li>ROMÂNTICA</li></ol>
+        <p class="tape-note__foot">volume no talo ⚡️</p>
+      </div>
+    </section>
+
+    <!-- ============ RACK / PANELS ============ -->
+    <div class="rack" id="rack">
+      <div class="rack__bar">
+        <p class="rack__signal" aria-live="polite"><span class="rack__dot" aria-hidden="true"></span><span id="signal">IN ▸ FUZZ ▸ AMP</span></p>
+        <div class="rack__nav">
+          <button type="button" id="prev-pedal" aria-label="Pedal anterior">◀</button>
+          <button type="button" id="next-pedal" aria-label="Próximo pedal">▶</button>
+        </div>
+      </div>
+
+      <!-- FUZZ → MÚSICA -->
+      <section class="panel panel--fuzz" id="musica" aria-labelledby="musica-title" tabindex="-1">
+        <header class="panel__head">
+          <p class="panel__kicker">PEDAL 01 · FUZZ</p>
+          <h2 class="panel__title echo gl" id="musica-title">MÚSICA</h2>
+        </header>
+
+        <div class="release">
+          <figure class="release__cover ghost">
+            <img class="fx" src="../assets/cover-anti-raso.jpg" alt="Capa do EP ANTI-RASO: uma porta no mar, um olho gigante e raios em magenta e azul neon" width="640" height="640" loading="lazy">
+          </figure>
+          <div class="release__info">
+            <p class="tag">EP NOVO · 30.07.2026 · 4 FAIXAS</p>
+            <h3 class="release__title echo gl">ANTI-RASO</h3>
+            <ol class="tracks">
+              <li><span>01</span>OFF!</li>
+              <li><span>02</span>QUEBRA-CABEÇA <em>feat. Dani Buarque</em></li>
+              <li><span>03</span>MERGULHAR</li>
+              <li><span>04</span>ROMÂNTICA</li>
+            </ol>
+            <blockquote class="quote">
+              <p>“ANTI-RASO significa mergulhar fundo nas coisas. É se recusar a viver apenas na superfície.”</p>
+              <cite>— Duda Maiolini</cite>
+            </blockquote>
+            <a class="score" href="https://www.unglued.com.br/reviews/anti-raso" target="_blank" rel="noopener">
+              <b>7.8</b><small>/10</small><span>review da Unglued ↗</span>
+            </a>
+            <div class="btns">
+              <a class="btn btn--solid" href="https://open.spotify.com/album/7EM81z5ydGQq04ZbkIE5aS" target="_blank" rel="noopener">OUVIR NO SPOTIFY ↗</a>
+              <a class="btn" href="https://ps.algohits.com/horney-anti-raso" target="_blank" rel="noopener">TODOS OS LINKS ↗</a>
+            </div>
+          </div>
+        </div>
+
+        <div class="embed">
+          <iframe title="ANTI-RASO, player do Spotify" src="https://open.spotify.com/embed/album/7EM81z5ydGQq04ZbkIE5aS?utm_source=generator&amp;theme=0" height="420" loading="lazy" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"></iframe>
+        </div>
+
+        <h3 class="sub">DISCOGRAFIA</h3>
+        <ul class="disco">
+          <li>
+            <a href="https://open.spotify.com/album/7EM81z5ydGQq04ZbkIE5aS" target="_blank" rel="noopener">
+              <img class="fx" src="../assets/cover-anti-raso.jpg" alt="" width="640" height="640" loading="lazy">
+              <b>ANTI-RASO</b><span>EP · 2026</span>
+            </a>
+          </li>
+          <li>
+            <a href="https://open.spotify.com/album/5jJ1py37M3i7qaZgkOOf4V" target="_blank" rel="noopener">
+              <img class="fx" src="../assets/cover-mergulhar.jpg" alt="" width="640" height="640" loading="lazy">
+              <b>MERGULHAR</b><span>single · 2026</span>
+            </a>
+          </li>
+          <li>
+            <a href="https://open.spotify.com/album/6Cg0ULHHKTsJo7GlEfPKrF" target="_blank" rel="noopener">
+              <img class="fx" src="../assets/cover-off.jpg" alt="" width="640" height="640" loading="lazy">
+              <b>OFF!</b><span>single · 13.11.2025</span>
+            </a>
+          </li>
+          <li>
+            <a href="https://open.spotify.com/album/3m7dNgjIIiHDuZiNcu8Vhi" target="_blank" rel="noopener">
+              <img class="fx" src="../assets/cover-four-rooms.jpg" alt="" width="640" height="640" loading="lazy">
+              <b>FOUR ROOMS FOR FOUR FOOLS</b><span>EP · 2022</span>
+            </a>
+          </li>
+        </ul>
+      </section>
+
+      <!-- DELAY → VÍDEO -->
+      <section class="panel panel--delay" id="video" aria-labelledby="video-title" tabindex="-1">
+        <header class="panel__head">
+          <p class="panel__kicker">PEDAL 02 · DELAY</p>
+          <h2 class="panel__title echo gl" id="video-title">VÍDEO</h2>
+          <p class="panel__aside">Gira <b>TIME</b> e <b>MIX</b> no delay e as imagens ganham eco.</p>
+        </header>
+
+        <div class="videos">
+          <figure class="video">
+            <div class="yt ghost" data-yt="9uP1P11at9M" data-title="HORNEY — Fool's Game (clipe oficial)">
+              <button class="yt__btn" type="button" aria-label="Tocar o clipe Fool's Game">
+                <img class="fx" src="../assets/yt-fools-game.jpg" alt="" width="1280" height="720" loading="lazy">
+                <span class="yt__play" aria-hidden="true"></span>
+              </button>
+            </div>
+            <figcaption><b>FOOL'S GAME</b> · clipe oficial (2022), dir. Rique Duarte</figcaption>
+          </figure>
+          <figure class="video">
+            <div class="yt ghost" data-yt="V9Rpgtc2vTs" data-title="HORNEY — ao vivo">
+              <button class="yt__btn" type="button" aria-label="Tocar o vídeo Horney ao vivo">
+                <img class="fx" src="../assets/yt-live.jpg" alt="" width="1280" height="720" loading="lazy">
+                <span class="yt__play" aria-hidden="true"></span>
+              </button>
+            </div>
+            <figcaption><b>HORNEY LIVE</b> · 38 segundos de palco</figcaption>
+          </figure>
+        </div>
+        <div class="btns">
+          <a class="btn btn--solid" href="https://www.youtube.com/@bandaHorney" target="_blank" rel="noopener">CANAL NO YOUTUBE ↗</a>
+        </div>
+      </section>
+
+      <!-- TUNER → SHOWS -->
+      <section class="panel panel--tuner" id="shows" aria-labelledby="shows-title" tabindex="-1">
+        <header class="panel__head">
+          <p class="panel__kicker">PEDAL 03 · TUNER</p>
+          <h2 class="panel__title echo gl" id="shows-title">SHOWS</h2>
+        </header>
+
+        <div class="shows">
+          <div class="shows__main">
+            <div class="tuner-big" id="tuner-big" aria-hidden="true">
+              <span class="tuner-big__scale"></span>
+              <span class="tuner-big__zero"></span>
+              <span class="tuner-big__needle"></span>
+              <span class="tuner-big__flat">♭</span><span class="tuner-big__sharp">♯</span>
+              <span class="tuner-big__note" id="tuner-big-note">E</span>
+              <span class="tuner-big__read" id="tuner-big-read">AFINADO PRO PRÓXIMO</span>
+            </div>
+
+            <ol class="gigs">
+              <li class="gig is-past" data-cents="-36" data-note="D" data-read="JÁ ERA · 17.09">
+                <time datetime="2026-09-17"><b>17</b>SET 2026</time>
+                <div class="gig__info">
+                  <h3>ROCK NIGHT @ FFFRONT</h3>
+                  <p>São Paulo (SP) · com Mastrobiso · <a href="../assets/sympla-rock-night.jpg" target="_blank" rel="noopener">ver flyer ↗</a></p>
+                </div>
+                <span class="gig__status">PASSADO</span>
+              </li>
+              <li class="gig is-past" data-cents="-18" data-note="D♯" data-read="JÁ ERA · 03.10">
+                <time datetime="2026-10-03"><b>03</b>OUT 2026</time>
+                <div class="gig__info">
+                  <h3>SHOW</h3>
+                  <p>local não divulgado</p>
+                </div>
+                <span class="gig__status">PASSADO</span>
+              </li>
+              <li class="gig is-next" id="next-gig" data-cents="0" data-note="E" data-read="AFINADO PRO PRÓXIMO">
+                <time datetime="2026-10-09"><b>09</b>OUT 2026</time>
+                <div class="gig__info">
+                  <h3>ÚLTIMO SHOW DO ANO</h3>
+                  <p>LOCAL EM BREVE · infos no <a href="https://www.instagram.com/horney.band/" target="_blank" rel="noopener">@horney.band ↗</a></p>
+                </div>
+                <span class="gig__status" id="next-status" data-date="2026-10-09">PRÓXIMO</span>
+              </li>
+            </ol>
+          </div>
+
+          <aside class="shows__flyer">
+            <a href="../assets/sympla-rock-night.jpg" target="_blank" rel="noopener" class="flyer ghost">
+              <img class="fx" src="../assets/sympla-rock-night.jpg" alt="Flyer da Rock Night no FFFront, São Paulo, 17 de setembro de 2026, com Horney e Mastrobiso" width="1179" height="662" loading="lazy">
+            </a>
+            <p class="shout gl">SAI DE CASA E COLE NOS SHOWS!!! ⚡️😈</p>
+            <a class="btn btn--solid" href="https://www.instagram.com/horney.band/" target="_blank" rel="noopener">AGENDA NO INSTAGRAM ↗</a>
+          </aside>
+        </div>
+      </section>
+
+      <!-- LOOPER → MERCH -->
+      <section class="panel panel--looper" id="merch" aria-labelledby="merch-title" tabindex="-1">
+        <header class="panel__head">
+          <p class="panel__kicker">PEDAL 04 · LOOPER</p>
+          <h2 class="panel__title echo gl" id="merch-title">MERCH</h2>
+          <div class="looper-lcd" aria-hidden="true">
+            <span class="looper-lcd__rec">● REC</span>
+            <span>LOOP 01</span>
+            <span class="looper-lcd__bar"><i></i></span>
+            <span>EM BREVE</span>
+          </div>
+        </header>
+
+        <ul class="merch">
+          <li class="merch__item">
+            <figure>
+              <svg viewBox="0 0 200 200" role="img" aria-label="Camiseta preta com o olho-sol da Horney no peito">
+                <path class="tee" fill="#121212" d="M60 20 L40 28 L10 60 L32 82 L50 70 L50 186 L150 186 L150 70 L168 82 L190 60 L160 28 L140 20 C132 34 118 40 100 40 C82 40 68 34 60 20 Z"/>
+                <image href="../assets/eye.png" x="68" y="62" width="64" height="64"/>
+                <text x="100" y="150" text-anchor="middle" class="tee-txt">H◎RNEY</text>
+              </svg>
+            </figure>
+            <h3>CAMISETA OLHO</h3>
+            <p>Preta, olho-sol no peito.</p>
+            <span class="badge">EM BREVE</span>
+          </li>
+          <li class="merch__item">
+            <figure>
+              <svg viewBox="0 0 200 200" role="img" aria-label="Camiseta off-white com a capa do ANTI-RASO estampada">
+                <defs><clipPath id="clip-cover"><rect x="62" y="56" width="76" height="76" rx="3"/></clipPath></defs>
+                <path class="tee" fill="#ece3cf" d="M60 20 L40 28 L10 60 L32 82 L50 70 L50 186 L150 186 L150 70 L168 82 L190 60 L160 28 L140 20 C132 34 118 40 100 40 C82 40 68 34 60 20 Z"/>
+                <image href="../assets/cover-anti-raso.jpg" x="62" y="56" width="76" height="76" clip-path="url(#clip-cover)"/>
+                <text x="100" y="152" text-anchor="middle" class="tee-txt tee-txt--dark">ANTI-RASO</text>
+              </svg>
+            </figure>
+            <h3>CAMISETA ANTI-RASO</h3>
+            <p>Off-white, capa do EP estampada.</p>
+            <span class="badge">EM BREVE</span>
+          </li>
+          <li class="merch__item">
+            <figure>
+              <svg viewBox="0 0 200 200" role="img" aria-label="Kit com três palhetas nas cores amarelo, magenta e azul">
+                <g transform="translate(34 46) rotate(-14 45 50)"><path fill="#F2A900" d="M45 4 C72 4 88 18 88 36 C88 60 60 88 45 98 C30 88 2 60 2 36 C2 18 18 4 45 4 Z"/><text x="45" y="46" text-anchor="middle" class="pick-txt">H◎</text></g>
+                <g transform="translate(76 34) rotate(8 45 50)"><path fill="#FF2BD6" d="M45 4 C72 4 88 18 88 36 C88 60 60 88 45 98 C30 88 2 60 2 36 C2 18 18 4 45 4 Z"/><text x="45" y="46" text-anchor="middle" class="pick-txt">H◎</text></g>
+                <g transform="translate(54 92) rotate(22 45 50)"><path fill="#1B3BFF" d="M45 4 C72 4 88 18 88 36 C88 60 60 88 45 98 C30 88 2 60 2 36 C2 18 18 4 45 4 Z"/><text x="45" y="46" text-anchor="middle" class="pick-txt pick-txt--light">H◎</text></g>
+              </svg>
+            </figure>
+            <h3>KIT DE PALHETAS</h3>
+            <p>Três cores, uma pra cada humor.</p>
+            <span class="badge">EM BREVE</span>
+          </li>
+          <li class="merch__item">
+            <figure>
+              <svg viewBox="0 0 200 200" role="img" aria-label="Patch redondo bordado com o olho e a frase sai de casa e cole nos shows">
+                <defs><path id="patch-arc" d="M100 100 m-66 0 a66 66 0 1 1 132 0 a66 66 0 1 1 -132 0"/></defs>
+                <circle cx="100" cy="100" r="88" fill="#111" stroke="#F2A900" stroke-width="6" stroke-dasharray="3 3"/>
+                <circle cx="100" cy="100" r="50" fill="#F2A900"/>
+                <image href="../assets/eye.png" x="58" y="58" width="84" height="84"/>
+                <text class="patch-txt"><textPath href="#patch-arc">SAI DE CASA E COLE NOS SHOWS ⚡</textPath></text>
+              </svg>
+            </figure>
+            <h3>PATCH BORDADO</h3>
+            <p>Pra jaqueta, mochila ou case.</p>
+            <span class="badge">EM BREVE</span>
+          </li>
+        </ul>
+        <div class="merch__cta">
+          <p>Ainda sem loja. Quer garantir o seu primeiro? Chama no direct.</p>
+          <a class="btn btn--solid" href="https://ig.me/m/horney.band" target="_blank" rel="noopener">CHAMA NA DM ↗</a>
+        </div>
+      </section>
+
+      <!-- WAH → SOCIAL -->
+      <section class="panel panel--wah" id="social" aria-labelledby="social-title" tabindex="-1">
+        <header class="panel__head">
+          <p class="panel__kicker">PEDAL 05 · WAH</p>
+          <h2 class="panel__title echo gl" id="social-title">SOCIAL</h2>
+        </header>
+
+        <div class="social">
+          <ul class="patchbay">
+            <li><a href="https://www.instagram.com/horney.band/" target="_blank" rel="noopener"><span class="pb-jack" aria-hidden="true"><img src="../assets/insta.png" alt="" width="20" height="20"></span><b>INSTAGRAM</b><span class="pb-handle">@horney.band</span><span class="pb-stat">7.3K</span></a></li>
+            <li><a href="https://open.spotify.com/artist/5zJVmieIGGEeOKbIrXmhZi" target="_blank" rel="noopener"><span class="pb-jack" aria-hidden="true">♫</span><b>SPOTIFY</b><span class="pb-handle">ouvintes mensais</span><span class="pb-stat">1.8K</span></a></li>
+            <li><a href="https://www.tiktok.com/@horney.band" target="_blank" rel="noopener"><span class="pb-jack" aria-hidden="true"><img src="../assets/tiktok.png" alt="" width="20" height="20"></span><b>TIKTOK</b><span class="pb-handle">@horney.band</span><span class="pb-stat">↗</span></a></li>
+            <li><a href="https://www.youtube.com/@bandaHorney" target="_blank" rel="noopener"><span class="pb-jack" aria-hidden="true">▶</span><b>YOUTUBE</b><span class="pb-handle">@bandaHorney</span><span class="pb-stat">↗</span></a></li>
+            <li><a href="https://www.threads.com/@horney.band" target="_blank" rel="noopener"><span class="pb-jack" aria-hidden="true">@</span><b>THREADS</b><span class="pb-handle">@horney.band</span><span class="pb-stat">↗</span></a></li>
+            <li><a href="https://ps.algohits.com/horney-anti-raso" target="_blank" rel="noopener"><span class="pb-jack" aria-hidden="true">◎</span><b>TODOS OS LINKS</b><span class="pb-handle">ANTI-RASO em todo lugar</span><span class="pb-stat">↗</span></a></li>
+          </ul>
+
+          <div class="ig">
+            <p class="ig__head">ÚLTIMAS NO <a href="https://www.instagram.com/horney.band/" target="_blank" rel="noopener">@HORNEY.BAND ↗</a></p>
+            <ul class="ig__grid">
+              <li><a href="https://www.instagram.com/horney.band/" target="_blank" rel="noopener"><img class="fx" src="../assets/ig-post-1.jpg" alt="Post recente da Horney no Instagram" width="640" height="640" loading="lazy"></a></li>
+              <li><a href="https://www.instagram.com/horney.band/" target="_blank" rel="noopener"><img class="fx" src="../assets/ig-post-2.jpg" alt="Post recente da Horney no Instagram" width="640" height="640" loading="lazy"></a></li>
+              <li><a href="https://www.instagram.com/horney.band/" target="_blank" rel="noopener"><img class="fx" src="../assets/ig-post-3.jpg" alt="Post recente da Horney no Instagram" width="640" height="640" loading="lazy"></a></li>
+              <li><a href="https://www.instagram.com/horney.band/" target="_blank" rel="noopener"><img class="fx" src="../assets/ig-post-4.jpg" alt="Guitarrista em luz vermelha com o texto: um recado importante" width="640" height="640" loading="lazy"></a></li>
+              <li><a href="https://www.instagram.com/horney.band/" target="_blank" rel="noopener"><img class="fx" src="../assets/ig-post-5.jpg" alt="Post recente da Horney no Instagram" width="640" height="640" loading="lazy"></a></li>
+              <li><a href="https://www.instagram.com/horney.band/" target="_blank" rel="noopener"><img class="fx" src="../assets/ig-reel-1.jpg" alt="Reel recente da Horney no Instagram" width="360" height="640" loading="lazy"></a></li>
+            </ul>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <footer class="foot">
+    <p class="foot__shout gl echo">SAI DE CASA E COLE NOS SHOWS!!!</p>
+    <img class="foot__logo fx" src="../assets/logo-wordmark.png" alt="HORNEY" width="1200" height="519" loading="lazy">
+    <nav class="foot__links" aria-label="Redes">
+      <a href="https://www.instagram.com/horney.band/" target="_blank" rel="noopener">Instagram</a>
+      <a href="https://open.spotify.com/artist/5zJVmieIGGEeOKbIrXmhZi" target="_blank" rel="noopener">Spotify</a>
+      <a href="https://www.tiktok.com/@horney.band" target="_blank" rel="noopener">TikTok</a>
+      <a href="https://www.youtube.com/@bandaHorney" target="_blank" rel="noopener">YouTube</a>
+      <a href="https://www.threads.com/@horney.band" target="_blank" rel="noopener">Threads</a>
+    </nav>
+    <p class="foot__meta">H◎RNEY · alt/indie rock · Joinville (SC) · 2026 · <a href="#top">↑ volta pro amp</a></p>
+  </footer>
+</body>
+</html>
