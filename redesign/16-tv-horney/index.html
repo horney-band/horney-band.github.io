@@ -1,0 +1,714 @@
+<!--
+  HORNEY — CONCEITO 16 · TV HORNEY (canal 24 horas, com o Disk Olho 0900)
+
+  Rationale:
+  A banda gostou da "ideia da TV" e pediu interação de verdade e o olho como oráculo. O round 1 tinha seis
+  canais estáticos; aqui a HORNEY vira uma emissora brasileira dos anos 2000 que está NO AR: uma grade de
+  programação presa ao relógio real de quem visita (madrugada, manhã, tarde, noite), programas com GC e
+  apresentador, e um programa de madrugada de vidência por telefone, o DISK OLHO 0900, apresentado pelo
+  próprio olho do logo. A pergunta do fã entra no ar como GC, o olho "consulta as cartas" e responde em
+  legenda oculta (Horney.oraculo.ask), com recado opcional no mural compartilhado (Horney.mural). O CANAL
+  COMUNITÁRIO é o mural de recados (letreiro + lista paginada), o DISK HORNEY é a parada votada pelo
+  telespectador, o JORNAL HORNEY traz a bio como reportagem especial, o TELETEXTO a agenda com status
+  calculado pela data real, o TELEVENDAS o merch EM BREVE. Tudo com conteúdo real, nada inventado.
+
+  Techniques:
+  - CRT em CSS (tela curva por border-radius elíptico, vinheta, reflexo, scanlines estáticas), ligar/desligar
+    por keyframes de transform, "rasgo" de troca de canal só com transform + flash de opacidade.
+  - Estática de canvas: 8 quadros de ruído pré-calculados (Uint32Array) desenhados SÓ durante o burst da troca;
+    SEM SINAL usa um quadro parado tremido por transform. Granulação = tile PNG gerado uma vez num canvas.
+  - Luz ambiente da sala segue o canal (variável --glow + fade de opacidade da camada de luz).
+  - Controle remoto (dock lateral no desktop, bottom sheet no celular): power (segurar = barras de
+    encerramento), 0–9 com entrada de dois dígitos e páginas de teletexto (301/302/303), CH±, VOL± (barra OSD
+    real + ganho do áudio sintetizado), MUTE, GUIA (EPG em <dialog>), INFO (banner com classificação
+    indicativa), CC (legenda descritiva em todo canal), último canal, MENU.
+  - Teclado: dígitos, setas, G, I, M, C, P, U; roda do mouse e swipe trocam de canal; deep link #ch-6;
+    canal lembrado em localStorage (prefixo horney:16-tv-horney:).
+  - Web Audio sintetizado (blip, baque do power, zumbido, telefone, tom de 1 kHz), mudo por padrão.
+  - Disk Horney: voto local (1 por navegador, trocável) re-ordena a parada com animação FLIP (transform).
+  - Disk Olho: olho SVG que segue o ponteiro (um rAF por frame, só escreve quando muda, para quando assenta),
+    pisca, dilata a pupila quando você digita; cartas viram com transform 3D; resposta em legenda.
+  - Fachadas: YouTube e faixas do Spotify só carregam no clique; o álbum ANTI-RASO (420 px) carrega na
+    primeira sintonia do CH 04. Animações infinitas pausam com aba oculta, ociosidade, TV desligada e fora da tela.
+  - prefers-reduced-motion: liga instantâneo, sem estática, sem rasgo, sem letreiros andando, sem FLIP.
+  - Sem JS: todos os canais empilhados e legíveis dentro da tela.
+-->
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>TV HORNEY · canal 24 horas — HORNEY</title>
+  <meta name="description" content="HORNEY: alt/indie rock de Joinville (SC). Uma emissora dos anos 2000 no ar: Jornal HORNEY, Disk HORNEY, Sessão ANTI-RASO, teletexto com a agenda, televendas do merch e o Disk Olho 0900, onde o olho responde a tua pergunta.">
+  <meta name="theme-color" content="#08060c">
+  <link rel="icon" href="../assets/eye.png">
+  <script>document.documentElement.classList.add('js');</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=Fraunces:ital,opsz,wght@0,9..144,400..900;1,9..144,400..900&family=IBM+Plex+Mono:wght@400;600;700&family=VT323&display=swap">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <a class="skip" href="#tela">Pular para a programação</a>
+  <a class="back" href="../index.html">← todos os conceitos</a>
+
+  <noscript>
+    <p class="noscript-note">JavaScript desligado: a TV HORNEY mostra todos os canais em sequência. Role a tela. O Disk Olho, o mural e os votos precisam de JavaScript.</p>
+  </noscript>
+
+  <div class="room" id="room">
+    <div class="ambient" id="ambient" aria-hidden="true"></div>
+
+    <div class="set">
+      <div class="tv" id="tv">
+        <div class="tv__bezel">
+          <div class="screen" id="screen">
+            <div class="tube" id="tube" data-ch="1">
+              <main class="channels" id="tela" tabindex="-1">
+
+                <!-- =================== CH 01 · TV HORNEY =================== -->
+                <section class="channel ch1 is-active" id="ch-1" data-n="1" data-name="TV HORNEY" data-glow="#f2a900" data-cc="[VINHETA DA TV HORNEY] o olho-sol abre no meio dos raios, o logo sobe. [trilha de vinheta] Grade de agora e a seguir, próximo show e o Disk Olho 0900." aria-labelledby="t1">
+                  <div class="ident" id="ident">
+                    <div class="ident__rays" aria-hidden="true"></div>
+                    <img class="ident__eye" src="../assets/eye-sun.png" alt="" width="300" height="300" decoding="async" aria-hidden="true">
+                    <h1 class="ident__title" id="t1" tabindex="-1">
+                      <span class="ident__tv">TV</span>
+                      <img class="ident__logo" src="../assets/logo-wordmark.png" alt="HORNEY" width="1200" height="519" decoding="async">
+                    </h1>
+                    <p class="ident__tag">CANAL 01 · JOINVILLE · SC · BRASIL · 24 HORAS NO AR</p>
+                  </div>
+                  <div class="ch__inner ch1__inner">
+                    <div class="ch1__row">
+                      <div class="onair">
+                        <p class="onair__k"><span class="onair__dot anim" aria-hidden="true"></span> AGORA NA TV HORNEY</p>
+                        <p class="onair__t" id="ch1-now">Horário Nobre HORNEY</p>
+                        <p class="onair__s" id="ch1-now-s">Quarteto de alt/indie rock de Joinville (SC). Punk, hardcore e grunge com respiros de MPB — e, desde 2026, cantando em português.</p>
+                        <p class="onair__next"><span>A SEGUIR</span> <b id="ch1-next-time">00:00</b> <span id="ch1-next">Corujão da Vinheta</span></p>
+                      </div>
+                      <div class="bumper" id="bumper" aria-hidden="true">
+                        <p class="bumper__big" id="bumper-big">VOLTAMOS JÁ</p>
+                        <p class="bumper__small" id="bumper-small">com HORNEY · ANTI-RASO — FORA AGORA</p>
+                      </div>
+                    </div>
+
+                    <h2 class="ch1__h">DESTAQUES DA GRADE <span id="ch1-daypart">· NOITE</span></h2>
+                    <ul class="picks" id="ch1-picks">
+                      <li><a class="pick" href="#ch-2" data-goto="2"><b>CH 02</b><span>JORNAL HORNEY</span></a></li>
+                      <li><a class="pick" href="#ch-3" data-goto="3"><b>CH 03</b><span>DISK HORNEY</span></a></li>
+                      <li><a class="pick" href="#ch-4" data-goto="4"><b>CH 04</b><span>SESSÃO ANTI-RASO</span></a></li>
+                      <li><a class="pick" href="#ch-7" data-goto="7"><b>CH 07</b><span>DISK OLHO 0900</span></a></li>
+                    </ul>
+
+                    <div class="ch1__row ch1__row--b">
+                      <a class="promo-olho" href="#ch-7" data-goto="7">
+                        <img src="../assets/eye-sun.png" alt="" width="300" height="300" loading="lazy" decoding="async">
+                        <span class="promo-olho__k" id="ch1-olho-k">HOJE À 00H · AO VIVO</span>
+                        <span class="promo-olho__t">DISK OLHO 0900</span>
+                        <span class="promo-olho__s" id="ch1-olho-s">O olho do logo atende a tua ligação. Pergunta o que quiser, ele responde no ar.</span>
+                      </a>
+                      <div class="nextshow">
+                        <p class="nextshow__k">PRÓXIMO SHOW</p>
+                        <p class="nextshow__t" id="ch1-show">sem shows marcados — cola no Instagram pra saber primeiro</p>
+                        <p class="nextshow__links">
+                          <a href="https://www.instagram.com/horney.band/" target="_blank" rel="noopener">@horney.band ↗</a>
+                          <a href="#ch-5" data-goto="5">TELETEXTO P300 ▸</a>
+                        </p>
+                      </div>
+                    </div>
+
+                    <button class="btn btn--ghost js-only" id="btn-ident" type="button">▶ VER A VINHETA DE NOVO</button>
+                    <p class="hint js-only">CONTROLE: <kbd>0</kbd>–<kbd>9</kbd> canal · <kbd>←</kbd><kbd>→</kbd> troca · <kbd>G</kbd> guia · <kbd>I</kbd> info · <kbd>C</kbd> legenda · <kbd>M</kbd> som · <kbd>P</kbd> power</p>
+                  </div>
+                </section>
+
+                <!-- =================== CH 02 · JORNAL HORNEY =================== -->
+                <section class="channel ch2" id="ch-2" data-n="2" data-name="JORNAL HORNEY" data-glow="#2f6bff" data-cc="[JORNAL HORNEY] bancada azul, foto da banda no telão, GC com a manchete. [vinheta de plantão] Notícias reais, letreiro, previsão do tempo pra Joinville e a reportagem especial com a bio." aria-labelledby="t2">
+                  <div class="ch__inner">
+                    <header class="jh">
+                      <h2 class="jh__logo" id="t2" tabindex="-1"><span>JORNAL</span> <b>HORNEY</b></h2>
+                      <p class="prog" data-prog="2">NO AR: JORNAL HORNEY</p>
+                    </header>
+
+                    <div class="studio">
+                      <figure class="studio__anchor">
+                        <img src="../assets/ig-post-1.jpg" alt="Pôster com a banda HORNEY dentro de um aro de chamas laranja e magenta" width="640" height="640" loading="lazy" decoding="async">
+                      </figure>
+                      <figure class="studio__chroma">
+                        <img id="news-img" src="../assets/cover-anti-raso.jpg" alt="Capa do EP ANTI-RASO: uma porta aberta no meio do mar, um olho gigante e raios em magenta e azul." width="640" height="640" loading="lazy" decoding="async">
+                      </figure>
+                      <p class="studio__live"><span class="anim" aria-hidden="true">●</span> AO VIVO · JOINVILLE</p>
+                      <div class="gc" id="news-gc" aria-live="off">
+                        <p class="gc__kicker" id="news-kicker">LANÇAMENTO</p>
+                        <p class="gc__title" id="news-title">HORNEY LANÇA O EP ANTI-RASO</p>
+                      </div>
+                    </div>
+
+                    <div class="news-ctl js-only">
+                      <button class="btn btn--small" id="news-prev" type="button" aria-label="Notícia anterior">◀</button>
+                      <button class="btn btn--small" id="news-pause" type="button" aria-pressed="false">❚❚ PAUSAR</button>
+                      <button class="btn btn--small" id="news-next" type="button" aria-label="Próxima notícia">▶</button>
+                      <span class="news-ctl__n" id="news-count">1/7</span>
+                    </div>
+                    <div class="news-body">
+                      <p id="news-body">EP · lançado em 30 de julho de 2026 · 4 faixas · 7.8/10 na Unglued. OFF!, QUEBRA-CABEÇA feat. Dani Buarque, MERGULHAR e ROMÂNTICA.</p>
+                      <a class="news-link" id="news-link" href="https://open.spotify.com/album/7EM81z5ydGQq04ZbkIE5aS" target="_blank" rel="noopener">OUVIR ANTI-RASO ↗</a>
+                    </div>
+
+                    <div class="ticker anim-host" role="marquee" aria-label="Letreiro do Jornal HORNEY">
+                      <span class="ticker__tag">PLANTÃO</span>
+                      <div class="ticker__track anim">
+                        <p class="ticker__text">⚡ ANTI-RASO — FORA AGORA ⚡ UNGLUED: 7.8/10 PRO ANTI-RASO ⚡ 7.3K NO INSTA · 1.8K OUVINTES/MÊS NO SPOTIFY ⚡ CANTANDO EM PORTUGUÊS DESDE 2026 ⚡ <span class="js-next-show">PRÓXIMO SHOW: SEM SHOWS MARCADOS — COLA NO INSTAGRAM PRA SABER PRIMEIRO</span> ⚡ MERCH EM BREVE ⚡ SAI DE CASA E COLE NOS SHOWS!!! &nbsp;</p>
+                        <p class="ticker__text" aria-hidden="true">⚡ ANTI-RASO — FORA AGORA ⚡ UNGLUED: 7.8/10 PRO ANTI-RASO ⚡ 7.3K NO INSTA · 1.8K OUVINTES/MÊS NO SPOTIFY ⚡ CANTANDO EM PORTUGUÊS DESDE 2026 ⚡ <span class="js-next-show">PRÓXIMO SHOW: SEM SHOWS MARCADOS — COLA NO INSTAGRAM PRA SABER PRIMEIRO</span> ⚡ MERCH EM BREVE ⚡ SAI DE CASA E COLE NOS SHOWS!!! &nbsp;</p>
+                      </div>
+                    </div>
+
+                    <section class="weather" aria-labelledby="wx-t">
+                      <h3 id="wx-t" class="weather__h">PREVISÃO DO TEMPO · <b>JOINVILLE/SC</b></h3>
+                      <ul class="weather__grid">
+                        <li data-part="madrugada"><span class="wx wx--drizzle" aria-hidden="true"></span><b>MADRUGADA</b><span>garoa. MERGULHAR no fone e janela fechada.</span></li>
+                        <li data-part="manha"><span class="wx wx--rain" aria-hidden="true"></span><b>MANHÃ</b><span>chuva. leva o casaco, o guarda-chuva e o fone.</span></li>
+                        <li data-part="tarde"><span class="wx wx--rain" aria-hidden="true"></span><b>TARDE</b><span>chuva. nenhuma surpresa pra quem é de Joinville.</span></li>
+                        <li data-part="noite"><span class="wx wx--storm" aria-hidden="true"></span><b>NOITE</b><span>chuva com raio. clima de capa do ANTI-RASO.</span></li>
+                      </ul>
+                      <p class="weather__note">Umidade: 100%, como sempre. Previsão pro próximo show: ninguém sabe ainda — fica de olho no <a href="https://www.instagram.com/horney.band/" target="_blank" rel="noopener">@horney.band ↗</a></p>
+                    </section>
+
+                    <article class="special" aria-labelledby="sp-t">
+                      <p class="special__k">REPORTAGEM ESPECIAL</p>
+                      <h3 class="special__h" id="sp-t">Quem é a HORNEY</h3>
+                      <div class="special__grid">
+                        <figure class="special__fig">
+                          <img src="../assets/ig-post-2.jpg" alt="Duda Maiolini cantando no microfone, luz vermelha, guitarrista ao fundo" width="640" height="640" loading="lazy" decoding="async">
+                          <figcaption>Duda Maiolini · voz &amp; letras</figcaption>
+                        </figure>
+                        <div class="special__text">
+                          <p class="special__lead">Quarteto de alt/indie rock de <strong>Joinville (SC)</strong>. Punk, hardcore e grunge no sangue, com toques de MPB — e cantando em português desde 2026. Voz e letras: <strong>Duda Maiolini</strong>. Composição com <strong>Rafa Bello</strong>. +2 que fazem o barulho todo acontecer.</p>
+                          <blockquote class="quote">
+                            <p>“A Horney não é uma banda que vai tocar só rock pesado, nem uma banda que vai tocar só música melancólica.”</p>
+                            <cite>— Duda Maiolini, voz &amp; letras</cite>
+                          </blockquote>
+                          <dl class="lineup">
+                            <div><dt>Voz &amp; letras</dt><dd>Duda (Eduarda) Maiolini</dd></div>
+                            <div><dt>Composição</dt><dd>Rafa Bello</dd></div>
+                            <div><dt>+2</dt><dd>no barulho</dd></div>
+                            <div><dt>feat. em QUEBRA-CABEÇA</dt><dd>Dani Buarque</dd></div>
+                          </dl>
+                        </div>
+                      </div>
+                      <ul class="special__cards">
+                        <li><b>Joinville</b><span>De onde vem o barulho. Um quarteto de Joinville (SC), lançando som desde o primeiro EP, em 2022.</span></li>
+                        <li><b>Rafa Bello</b><span>Escreve as músicas junto com a Duda. Se o refrão grudou na tua cabeça, a culpa é dividida.</span></li>
+                        <li><b>Dani Buarque</b><span>Divide a faixa 2 de ANTI-RASO com a HORNEY. Tem peça que só encaixa a dois.</span></li>
+                      </ul>
+                      <figure class="special__wide">
+                        <img src="../assets/live-crowd.jpg" alt="Vocalista de costas diante de uma plateia lotada" width="1366" height="768" loading="lazy" decoding="async">
+                        <figcaption>Você. No próximo show. Na grade. Gritando o refrão de OFF!</figcaption>
+                      </figure>
+                    </article>
+                  </div>
+                </section>
+
+                <!-- =================== CH 03 · DISK HORNEY =================== -->
+                <section class="channel ch3" id="ch-3" data-n="3" data-name="DISK HORNEY" data-glow="#ff2bd6" data-cc="[DISK HORNEY] parada de clipes e faixas da HORNEY. Cada posição abre o clipe ou a faixa. Você vota na favorita e ela sobe pro número 1. [vinheta de parada]" aria-labelledby="t3">
+                  <div class="ch__inner">
+                    <header class="disk__head">
+                      <h2 class="disk__logo" id="t3" tabindex="-1"><span>DISK</span><b>HORNEY</b></h2>
+                      <p class="prog" data-prog="3">NO AR: DISK HORNEY</p>
+                      <p class="disk__lead">A parada da TV HORNEY. Escolhe a tua favorita e ela sobe pro topo — 1 voto por aparelho, dá pra trocar quando quiser. Sem voto, a ordem é a do disco.</p>
+                    </header>
+                    <div class="disk__grid">
+                      <div class="disk__stage">
+                        <div class="disk__screen" id="disk-stage">
+                          <img src="../assets/cover-off.jpg" alt="Capa do single OFF!" width="640" height="640" loading="lazy" decoding="async">
+                        </div>
+                        <div class="vj" id="disk-vj" aria-hidden="true">
+                          <span class="vj__artist">HORNEY</span>
+                          <b class="vj__title" id="vj-title">“OFF!”</b>
+                          <span class="vj__album" id="vj-album">ANTI-RASO · 2026</span>
+                          <span class="vj__extra" id="vj-extra">faixa 01 · 3:19</span>
+                        </div>
+                        <p class="disk__note" id="disk-note">single · lançado em 13 de novembro de 2025 · abre o EP ANTI-RASO</p>
+                      </div>
+                      <div class="disk__chart">
+                        <ol class="disk__list" id="disk-list">
+                          <li class="dk"><span class="dk__pos">1</span><span class="dk__info"><b>OFF!</b><span>ANTI-RASO · faixa 01 · 3:19</span></span><a class="dk__go" href="https://open.spotify.com/track/7KteAUfbNB4CtxnbMudBad" target="_blank" rel="noopener">OUVIR ↗</a></li>
+                          <li class="dk"><span class="dk__pos">2</span><span class="dk__info"><b>QUEBRA-CABEÇA (feat. Dani Buarque)</b><span>ANTI-RASO · faixa 02 · 4:20</span></span><a class="dk__go" href="https://open.spotify.com/track/3SYpLwh1ChHyNEOn5TNOWy" target="_blank" rel="noopener">OUVIR ↗</a></li>
+                          <li class="dk"><span class="dk__pos">3</span><span class="dk__info"><b>MERGULHAR</b><span>ANTI-RASO · faixa 03 · 3:45</span></span><a class="dk__go" href="https://open.spotify.com/track/0aJtgSakI5r87CfAqNdDXP" target="_blank" rel="noopener">OUVIR ↗</a></li>
+                          <li class="dk"><span class="dk__pos">4</span><span class="dk__info"><b>ROMÂNTICA</b><span>ANTI-RASO · faixa 04 · 2:28</span></span><a class="dk__go" href="https://open.spotify.com/track/2p5r9m60eSDxMGey8GRubR" target="_blank" rel="noopener">OUVIR ↗</a></li>
+                          <li class="dk"><span class="dk__pos">5</span><span class="dk__info"><b>Fool's Game — clipe oficial</b><span>2022 · dir. Rique Duarte</span></span><a class="dk__go" href="https://www.youtube.com/watch?v=9uP1P11at9M" target="_blank" rel="noopener">VER ↗</a></li>
+                          <li class="dk"><span class="dk__pos">6</span><span class="dk__info"><b>HORNEY ao vivo</b><span>ao vivo · 0:38</span></span><a class="dk__go" href="https://www.youtube.com/watch?v=V9Rpgtc2vTs" target="_blank" rel="noopener">VER ↗</a></li>
+                        </ol>
+                        <p class="disk__status" id="disk-status" role="status" aria-live="polite"></p>
+                        <button class="btn btn--small js-only" id="disk-clear" type="button" hidden>TIRAR MEU VOTO</button>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
+                <!-- =================== CH 04 · SESSÃO ANTI-RASO =================== -->
+                <section class="channel ch4" id="ch-4" data-n="4" data-name="SESSÃO ANTI-RASO" data-glow="#ff7a1a" data-cc="[SESSÃO ANTI-RASO] abertura de filme da tarde em laranja e rosa. Capa, créditos, as 4 faixas e o player do Spotify com o EP inteiro. Reprises: MERGULHAR, OFF! e Four Rooms for Four Fools." aria-labelledby="t4">
+                  <div class="ch__inner">
+                    <header class="sessao__open">
+                      <p class="sessao__pre">HOJE NA</p>
+                      <h2 class="sessao__title" id="t4" tabindex="-1"><span>Sessão</span> <b>ANTI&#8209;RASO</b></h2>
+                      <p class="prog" data-prog="4">NO AR: SESSÃO ANTI-RASO</p>
+                    </header>
+                    <div class="sessao__grid">
+                      <figure class="sessao__cover">
+                        <img src="../assets/cover-anti-raso.jpg" alt="Capa do EP ANTI-RASO: uma porta aberta no meio do mar, um olho gigante e raios em magenta e azul." width="640" height="640" loading="lazy" decoding="async">
+                        <a class="stamp" href="https://www.unglued.com.br/reviews/anti-raso" target="_blank" rel="noopener"><span>UNGLUED</span><b>7.8<small>/10</small></b><span>ler a review ↗</span></a>
+                      </figure>
+                      <div class="sessao__credits">
+                        <p class="sessao__meta">EP · lançado em 30 de julho de 2026 · 4 faixas · 7.8/10 na Unglued</p>
+                        <dl class="credits">
+                          <div><dt>Voz &amp; letras</dt><dd>Duda Maiolini</dd></div>
+                          <div><dt>Composição</dt><dd>Rafa Bello</dd></div>
+                          <div><dt>Barulho</dt><dd>+2</dd></div>
+                          <div><dt>Participação especial</dt><dd>Dani Buarque <small>(QUEBRA-CABEÇA)</small></dd></div>
+                        </dl>
+                        <ol class="tracks">
+                          <li><a href="https://open.spotify.com/track/7KteAUfbNB4CtxnbMudBad" target="_blank" rel="noopener"><span class="tracks__n">01</span><span class="tracks__t">OFF!</span><span class="tracks__d">3:19</span></a></li>
+                          <li><a href="https://open.spotify.com/track/3SYpLwh1ChHyNEOn5TNOWy" target="_blank" rel="noopener"><span class="tracks__n">02</span><span class="tracks__t">QUEBRA-CABEÇA <em>feat. Dani Buarque</em></span><span class="tracks__d">4:20</span></a></li>
+                          <li><a href="https://open.spotify.com/track/0aJtgSakI5r87CfAqNdDXP" target="_blank" rel="noopener"><span class="tracks__n">03</span><span class="tracks__t">MERGULHAR</span><span class="tracks__d">3:45</span></a></li>
+                          <li><a href="https://open.spotify.com/track/2p5r9m60eSDxMGey8GRubR" target="_blank" rel="noopener"><span class="tracks__n">04</span><span class="tracks__t">ROMÂNTICA</span><span class="tracks__d">2:28</span></a></li>
+                        </ol>
+                        <p class="tracks__total">4 faixas · 13:53</p>
+                        <blockquote class="quote quote--sessao">
+                          <p>“ANTI-RASO significa mergulhar fundo nas coisas. É se recusar a viver apenas na superfície.”</p>
+                          <cite>— Duda Maiolini, voz &amp; letras</cite>
+                        </blockquote>
+                      </div>
+                    </div>
+                    <div class="sessao__player" id="sessao-player">
+                      <noscript><iframe title="Spotify: HORNEY — ANTI-RASO" src="https://open.spotify.com/embed/album/7EM81z5ydGQq04ZbkIE5aS?utm_source=generator&amp;theme=0" width="100%" height="420" loading="lazy" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"></iframe></noscript>
+                    </div>
+                    <div class="btn-row">
+                      <a class="btn btn--sun" href="https://open.spotify.com/album/7EM81z5ydGQq04ZbkIE5aS" target="_blank" rel="noopener">OUVIR ANTI-RASO ↗</a>
+                      <a class="btn" href="https://ps.algohits.com/horney-anti-raso" target="_blank" rel="noopener">Todas as plataformas ↗</a>
+                    </div>
+
+                    <h3 class="sessao__h">REPRISES</h3>
+                    <ul class="reprises">
+                      <li><a class="reprise" href="https://open.spotify.com/album/5jJ1py37M3i7qaZgkOOf4V" target="_blank" rel="noopener"><img src="../assets/cover-mergulhar.jpg" alt="Capa do single MERGULHAR" width="640" height="640" loading="lazy" decoding="async"><span class="reprise__tag">REPRISE</span><b>MERGULHAR</b><span>single · 2026 · também está no EP ANTI-RASO</span></a></li>
+                      <li><a class="reprise" href="https://open.spotify.com/album/6Cg0ULHHKTsJo7GlEfPKrF" target="_blank" rel="noopener"><img src="../assets/cover-off.jpg" alt="Capa do single OFF!" width="640" height="640" loading="lazy" decoding="async"><span class="reprise__tag">REPRISE</span><b>OFF!</b><span>single · 13 NOV 2025 · abre o EP ANTI-RASO</span></a></li>
+                      <li><a class="reprise" href="https://open.spotify.com/album/3m7dNgjIIiHDuZiNcu8Vhi" target="_blank" rel="noopener"><img src="../assets/cover-four-rooms.jpg" alt="Capa de Four Rooms for Four Fools" width="640" height="640" loading="lazy" decoding="async"><span class="reprise__tag">REPRISE · O PRIMEIRO</span><b>Four Rooms for Four Fools</b><span>EP · 2022</span></a></li>
+                    </ul>
+                  </div>
+                </section>
+
+                <!-- =================== CH 05 · TELETEXTO =================== -->
+                <section class="channel ch5" id="ch-5" data-n="5" data-name="TELETEXTO" data-glow="#00c8ff" data-cc="[TELETEXTO HORNEY] páginas de texto em blocos coloridos, 40 colunas. Página 300 índice, 301 próximos shows, 302 shows que já rolaram, 303 booking. Digite o número da página no controle." aria-labelledby="t5">
+                  <div class="ch__inner ttx-wrap">
+                    <div class="ttx" id="ttx">
+                      <p class="ttx__head"><span class="ttx__p" id="ttx-page">P300</span><span class="ttx__name">HORNEY TXT</span><span class="ttx__clock" id="ttx-clock">--:--:--</span></p>
+                      <h2 class="ttx__title" id="t5" tabindex="-1"><span class="ttx__mosaic" aria-hidden="true"></span><span>TELETEXTO</span></h2>
+                      <div class="ttx__body" id="ttx-body" aria-live="polite">
+                        <p class="tl"><span class="c-y">AGENDA HORNEY 2026</span></p>
+                        <p class="tl"><span class="c-c">17/09 QUI</span> ROCK NIGHT @ FFFRONT</p>
+                        <p class="tl">FFFront · Rua Purpurina, 199 — Vila Madalena, São Paulo · qui, 20h · w/ Mastrobiso</p>
+                        <p class="tl"><span class="c-c">03/10 SÁB</span> HORNEY AO VIVO</p>
+                        <p class="tl">LOCAL NÃO INFORMADO</p>
+                        <p class="tl"><span class="c-c">09/10 SEX</span> ÚLTIMO SHOW DO ANO</p>
+                        <p class="tl">LOCAL EM BREVE — fica de olho no insta</p>
+                        <p class="tl"><a href="https://www.instagram.com/horney.band/" target="_blank" rel="noopener">INFOS NO IG ↗</a> · <a href="https://ig.me/m/horney.band">DM ↗</a></p>
+                      </div>
+                      <nav class="ttx__fast js-only" aria-label="Páginas do teletexto">
+                        <button class="fx fx--r" type="button" data-page="300">300 ÍNDICE</button>
+                        <button class="fx fx--g" type="button" data-page="301">301 PRÓXIMOS</button>
+                        <button class="fx fx--y" type="button" data-page="302">302 JÁ ROLOU</button>
+                        <button class="fx fx--c" type="button" data-page="303">303 BOOKING</button>
+                      </nav>
+                      <p class="ttx__hint js-only">digite 3-0-1 no controle (ou no teclado) pra ir direto à página</p>
+                      <p class="prog prog--ttx" data-prog="5">NO AR: TELETEXTO HORNEY</p>
+                    </div>
+                  </div>
+                </section>
+
+                <!-- =================== CH 06 · TELEVENDAS =================== -->
+                <section class="channel ch6" id="ch-6" data-n="6" data-name="TELEVENDAS" data-glow="#ff3b1f" data-cc="[TELEVENDAS HORNEY] estúdio de vendas com explosão amarela LIGUE JÁ. Merch da HORNEY: tudo EM BREVE, sem preço. Pedido = DM no Instagram. [locutor animado]" aria-labelledby="t6">
+                  <div class="ch__inner">
+                    <header class="shop__head">
+                      <div>
+                        <p class="shop__pre">TELEVENDAS H◎RNEY</p>
+                        <h2 class="shop__title" id="t6" tabindex="-1">MERCH</h2>
+                        <p class="prog" data-prog="6">NO AR: TELEVENDAS</p>
+                      </div>
+                      <p class="burst anim" aria-hidden="true"><span>LIGUE<br>JÁ!*</span></p>
+                    </header>
+
+                    <div class="shop__hero" id="shop-hero" aria-live="polite">
+                      <div class="shop__stage" id="shop-stage">
+                        <div class="mock mock--tee mock--black"><img src="../assets/cover-anti-raso.jpg" alt="" width="640" height="640" loading="lazy" decoding="async"></div>
+                      </div>
+                      <div class="shop__info">
+                        <p class="shop__n" id="shop-n">OFERTA 1 DE 6</p>
+                        <h3 class="shop__name" id="shop-name">Camiseta ANTI-RASO</h3>
+                        <p class="shop__desc" id="shop-desc">Preta, com a capa do EP no peito: a porta no mar, o olho e o raio.</p>
+                        <p class="shop__price"><span class="soon">EM BREVE</span> <span>sem preço ainda</span></p>
+                        <div class="btn-row">
+                          <a class="btn btn--call" href="https://ig.me/m/horney.band" target="_blank" rel="noopener">LIGUE JÁ → DM ↗</a>
+                          <button class="btn btn--more js-only" id="shop-more" type="button">MAS NÃO É SÓ ISSO!</button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="countdown">
+                      <p class="countdown__k">ESTA OFERTA TERMINA EM</p>
+                      <p class="countdown__t" id="shop-count">--:--:--</p>
+                      <p class="countdown__note" id="shop-count-note">*termina em nada: não tem oferta, não tem preço, não tem carrinho. É tudo EM BREVE. Quer garantir o teu? Manda DM que a gente avisa primeiro.</p>
+                    </div>
+
+                    <h3 class="shop__h">TODOS OS PRODUTOS DO PROGRAMA</h3>
+                    <ul class="products" id="shop-list">
+                      <li class="product" data-i="0" data-name="Camiseta ANTI-RASO" data-desc="Preta, com a capa do EP no peito: a porta no mar, o olho e o raio.">
+                        <div class="product__stage"><div class="mock mock--tee mock--black" role="img" aria-label="Camiseta preta com a arte do ANTI-RASO estampada no peito"><img src="../assets/cover-anti-raso.jpg" alt="" width="640" height="640" loading="lazy" decoding="async"></div></div>
+                        <h4>Camiseta ANTI-RASO</h4><p>Preta, com a capa do EP no peito: a porta no mar, o olho e o raio.</p>
+                        <p class="product__foot"><span class="soon">EM BREVE</span><a class="btn btn--small" href="https://ig.me/m/horney.band" target="_blank" rel="noopener">Quero! manda DM ↗</a></p>
+                      </li>
+                      <li class="product" data-i="1" data-name="Camiseta OLHO" data-desc="Amarela HORNEY com o olho-sol do logo em preto. Pra ser visto de longe na grade.">
+                        <div class="product__stage"><div class="mock mock--tee mock--yellow" role="img" aria-label="Camiseta amarela com o olho-sol da HORNEY em preto"><img src="../assets/eye.png" alt="" width="1024" height="1024" loading="lazy" decoding="async"></div></div>
+                        <h4>Camiseta OLHO</h4><p>Amarela HORNEY com o olho-sol do logo em preto. Pra ser visto de longe na grade.</p>
+                        <p class="product__foot"><span class="soon">EM BREVE</span><a class="btn btn--small" href="https://ig.me/m/horney.band" target="_blank" rel="noopener">Quero! manda DM ↗</a></p>
+                      </li>
+                      <li class="product" data-i="2" data-name="Moletom OFF!" data-desc="pra Joinville no inverno. e no verão também.">
+                        <div class="product__stage"><div class="mock mock--hoodie" role="img" aria-label="Moletom preto com a arte do single OFF!"><img src="../assets/cover-off.jpg" alt="" width="640" height="640" loading="lazy" decoding="async"></div></div>
+                        <h4>Moletom OFF!</h4><p>pra Joinville no inverno. e no verão também.</p>
+                        <p class="product__foot"><span class="soon">EM BREVE</span><a class="btn btn--small" href="https://ig.me/m/horney.band" target="_blank" rel="noopener">Quero! manda DM ↗</a></p>
+                      </li>
+                      <li class="product" data-i="3" data-name="Ecobag H◎RNEY" data-desc="Algodão cru com o logo amarelo. Cabe o merch, o casaco e a água do show.">
+                        <div class="product__stage"><div class="mock mock--bag" role="img" aria-label="Ecobag de algodão cru com o logo HORNEY em amarelo"><img src="../assets/logo-wordmark.png" alt="" width="1200" height="519" loading="lazy" decoding="async"></div></div>
+                        <h4>Ecobag H◎RNEY</h4><p>Algodão cru com o logo amarelo. Cabe o merch, o casaco e a água do show.</p>
+                        <p class="product__foot"><span class="soon">EM BREVE</span><a class="btn btn--small" href="https://ig.me/m/horney.band" target="_blank" rel="noopener">Quero! manda DM ↗</a></p>
+                      </li>
+                      <li class="product" data-i="4" data-name="Pôster OFF!" data-desc="A3, tiragem limitada.">
+                        <div class="product__stage"><div class="mock mock--poster" role="img" aria-label="Pôster da arte do single OFF!"><img src="../assets/cover-off.jpg" alt="" width="640" height="640" loading="lazy" decoding="async"><span>HORNEY · SINGLE · 2025</span><span>A3 · TIRAGEM LIMITADA</span></div></div>
+                        <h4>Pôster OFF!</h4><p>A3, tiragem limitada.</p>
+                        <p class="product__foot"><span class="soon">EM BREVE</span><a class="btn btn--small" href="https://ig.me/m/horney.band" target="_blank" rel="noopener">Quero! manda DM ↗</a></p>
+                      </li>
+                      <li class="product" data-i="5" data-name="Kit de bottons" data-desc="pra mochila, pra jaqueta, pro seu Top 8 da vida real.">
+                        <div class="product__stage"><div class="mock mock--buttons" role="img" aria-label="Kit de bottons: MOOD: ANTI- RASO, H◎ e 😈"><span>MOOD: ANTI- RASO</span><span>H◎</span><span>😈</span></div></div>
+                        <h4>Kit de bottons</h4><p>pra mochila, pra jaqueta, pro seu Top 8 da vida real.</p>
+                        <p class="product__foot"><span class="soon">EM BREVE</span><a class="btn btn--small" href="https://ig.me/m/horney.band" target="_blank" rel="noopener">Quero! manda DM ↗</a></p>
+                      </li>
+                    </ul>
+                    <p class="shop__foot">*ligar = mandar DM no Instagram. Nada de carrinho, nada de checkout. Ou segue o <a href="https://www.instagram.com/horney.band/" target="_blank" rel="noopener">@horney.band ↗</a></p>
+                  </div>
+                </section>
+
+                <!-- =================== CH 07 · DISK OLHO 0900 =================== -->
+                <section class="channel ch7" id="ch-7" data-n="7" data-name="DISK OLHO 0900" data-glow="#9b3bff" data-cc="[DISK OLHO 0900] cenário de veludo roxo, velas acesas, telefone vermelho. O Olho, apresentador, olha pra você e pisca. Ligue pelo formulário: sua pergunta entra no ar e o Olho responde em legenda." aria-labelledby="t7">
+                  <div class="ch__inner">
+                    <header class="olho__head">
+                      <p class="olho__live" id="olho-live"><span class="anim" aria-hidden="true">●</span> REPRISE</p>
+                      <h2 class="olho__title" id="t7" tabindex="-1">Disk <b>Olho</b> <span>0900</span></h2>
+                      <p class="prog" data-prog="7">NO AR: DISK OLHO 0900</p>
+                    </header>
+
+                    <div class="olho__grid">
+                      <div class="olho__set">
+                        <div class="olho__stage" id="olho-stage">
+                          <div class="olho__host">
+                            <svg class="olho" id="olho" viewBox="0 0 200 200" role="img" aria-labelledby="olho-svg-t">
+                              <title id="olho-svg-t">O Olho, apresentador do Disk Olho 0900</title>
+                              <defs>
+                                <radialGradient id="olho-iris-g" cx="50%" cy="42%" r="60%">
+                                  <stop offset="0" stop-color="#ffd75e"/>
+                                  <stop offset=".38" stop-color="#ff2bd6"/>
+                                  <stop offset="1" stop-color="#1b3bff"/>
+                                </radialGradient>
+                                <clipPath id="olho-clip"><path d="M22 100 Q100 30 178 100 Q100 170 22 100Z"/></clipPath>
+                              </defs>
+                              <circle cx="100" cy="100" r="99" fill="#f2a900"/>
+                              <polygon fill="#111" points="100.0,5.0 114.4,27.4 136.4,12.2 141.1,38.5 167.2,32.8 161.5,58.9 187.8,63.6 172.6,85.6 195.0,100.0 172.6,114.4 187.8,136.4 161.5,141.1 167.2,167.2 141.1,161.5 136.4,187.8 114.4,172.6 100.0,195.0 85.6,172.6 63.6,187.8 58.9,161.5 32.8,167.2 38.5,141.1 12.2,136.4 27.4,114.4 5.0,100.0 27.4,85.6 12.2,63.6 38.5,58.9 32.8,32.8 58.9,38.5 63.6,12.2 85.6,27.4"/>
+                              <path d="M22 100 Q100 30 178 100 Q100 170 22 100Z" fill="#fbf6ea"/>
+                              <g clip-path="url(#olho-clip)">
+                                <g class="olho__iris" id="olho-iris">
+                                  <circle cx="100" cy="100" r="30" fill="url(#olho-iris-g)"/>
+                                  <circle class="olho__pupil" id="olho-pupil" cx="100" cy="100" r="13" fill="#050505"/>
+                                  <circle cx="90" cy="90" r="5" fill="#fff" opacity=".92"/>
+                                </g>
+                                <rect class="olho__lid" id="olho-lid" x="18" y="28" width="164" height="146" fill="#111"/>
+                              </g>
+                              <path d="M22 100 Q100 30 178 100 Q100 170 22 100Z" fill="none" stroke="#111" stroke-width="5"/>
+                            </svg>
+                          </div>
+                          <div class="olho__table" aria-hidden="true">
+                            <span class="vela vela--a"><i class="chama anim"></i></span>
+                            <span class="vela vela--b"><i class="chama anim"></i></span>
+                            <div class="cartas" id="olho-cartas">
+                              <div class="carta"><div class="carta__in"><span class="carta__back"></span><span class="carta__front">A PORTA</span></div></div>
+                              <div class="carta"><div class="carta__in"><span class="carta__back"></span><span class="carta__front">O MAR</span></div></div>
+                              <div class="carta"><div class="carta__in"><span class="carta__back"></span><span class="carta__front">O RAIO</span></div></div>
+                            </div>
+                            <span class="fone" id="olho-fone"><i></i></span>
+                            <span class="vela vela--c"><i class="chama anim"></i></span>
+                          </div>
+                          <p class="olho__number">0900-OLHO-000</p>
+                          <div class="olho__gc" id="olho-gc" hidden>
+                            <p class="olho__gc-who" id="olho-gc-who"></p>
+                            <p class="olho__gc-q" id="olho-gc-q"></p>
+                          </div>
+                          <div class="olho__cc" id="olho-cc" hidden>
+                            <p class="olho__cc-text" id="olho-answer"></p>
+                          </div>
+                        </div>
+                        <p class="olho__sr sr-only" id="olho-sr" aria-live="polite"></p>
+                        <ul class="olho__links" id="olho-links" aria-label="Links da resposta do Olho"></ul>
+                        <p class="olho__sorte">SORTE DO DIA: <span id="olho-sorte">o olho está abrindo…</span></p>
+                      </div>
+
+                      <aside class="olho__side">
+                        <form class="olho__form js-only" id="olho-form" novalidate>
+                          <p class="olho__form-k">☎ LIGUE AGORA <small>*ligação gratuita: é um formulário</small></p>
+                          <div class="field-row">
+                            <label class="field"><span>Teu nome</span><input id="olho-name" name="name" type="text" maxlength="24" autocomplete="nickname" placeholder="ex.: Fulana"></label>
+                            <label class="field"><span>Cidade <small>(opcional)</small></span><input id="olho-city" name="city" type="text" maxlength="13" autocomplete="address-level2" placeholder="ex.: Joinville"></label>
+                          </div>
+                          <label class="field"><span>Tua pergunta pro Olho</span><textarea id="olho-q" name="q" rows="3" maxlength="500" required placeholder="vai ter show em Curitiba? ela gosta de mim?"></textarea></label>
+                          <p class="field-count" id="olho-count" aria-hidden="true">0/500</p>
+                          <label class="check"><input id="olho-mural" type="checkbox" checked> <span>pode ler meu recado no ar <small>(vai pro mural de recados da HORNEY)</small></span></label>
+                          <button class="btn btn--olho" id="olho-submit" type="submit">☎ LIGAR PRO OLHO</button>
+                          <p class="olho__status" id="olho-status" role="status" aria-live="polite"></p>
+                        </form>
+                        <noscript><p class="olho__status">A linha do 0900 precisa de JavaScript pra tocar.</p></noscript>
+                        <section class="calls" aria-labelledby="calls-t">
+                          <h3 class="calls__h" id="calls-t">NO AR ANTES</h3>
+                          <ul class="calls__list" id="olho-calls"></ul>
+                        </section>
+                      </aside>
+                    </div>
+                  </div>
+                </section>
+
+                <!-- =================== CH 08 · CANAL COMUNITÁRIO =================== -->
+                <section class="channel ch8" id="ch-8" data-n="8" data-name="CANAL COMUNITÁRIO" data-glow="#3dff6e" data-cc="[CANAL COMUNITÁRIO] gerador de caracteres amarelo sobre azul. Recados dos telespectadores passam no letreiro e numa lista paginada. Formulário pra mandar recado. Classificados com as redes da HORNEY." aria-labelledby="t8">
+                  <div class="ch__inner">
+                    <header class="cc8__head">
+                      <p class="cc8__pre">CANAL 08 · ACESSO PÚBLICO</p>
+                      <h2 class="cc8__title" id="t8" tabindex="-1">Canal Comunitário</h2>
+                      <p class="prog" data-prog="8">NO AR: RECADOS DOS TELESPECTADORES</p>
+                    </header>
+
+                    <div class="crawl anim-host" id="crawl" aria-hidden="true">
+                      <span class="crawl__tag">RECADOS</span>
+                      <div class="crawl__track anim" id="crawl-track"></div>
+                    </div>
+
+                    <div class="cc8__grid">
+                      <section class="recados" aria-labelledby="rec-t">
+                        <h3 class="cc8__h" id="rec-t">RECADOS DOS TELESPECTADORES</h3>
+                        <ul class="recados__list" id="mural-list">
+                          <li class="recado recado--empty">o mural de recados precisa de JavaScript pra aparecer.</li>
+                        </ul>
+                        <div class="pager js-only">
+                          <button class="btn btn--small" id="mural-prev" type="button">◀ ANTERIORES</button>
+                          <span class="pager__n" id="mural-page">PÁG 1/1</span>
+                          <button class="btn btn--small" id="mural-next" type="button">MAIS ▶</button>
+                        </div>
+                      </section>
+
+                      <form class="mural-form js-only" id="mural-form" novalidate>
+                        <h3 class="cc8__h">MANDE SEU RECADO</h3>
+                        <label class="field"><span>Nome <small>(opcional)</small></span><input id="mural-name" type="text" maxlength="40" autocomplete="nickname" placeholder="ex.: Bia · Joinville"></label>
+                        <label class="field"><span>Recado</span><textarea id="mural-text" rows="4" maxlength="500" required placeholder="manda teu recado pra HORNEY e pra quem tá assistindo"></textarea></label>
+                        <p class="field-count" id="mural-count" aria-hidden="true">0/500</p>
+                        <button class="btn btn--cc8" type="submit">MANDAR PRO LETREIRO</button>
+                        <p class="mural-form__status" id="mural-status" role="status" aria-live="polite"></p>
+                        <p class="mural-form__fine">o mural é compartilhado entre os conceitos do redesign e fica salvo neste navegador.</p>
+                      </form>
+                    </div>
+
+                    <section class="classi" aria-labelledby="classi-t">
+                      <h3 class="cc8__h" id="classi-t">CLASSIFICADOS</h3>
+                      <ul class="classi__grid">
+                        <li><a href="https://ig.me/m/horney.band" target="_blank" rel="noopener"><b>PROCURA-SE</b> gente pra colar nos shows. Show na tua cidade? Tratar na DM. <span>DM no Instagram ↗</span></a></li>
+                        <li><a href="https://www.instagram.com/horney.band/" target="_blank" rel="noopener"><b>SEGUE A GENTE</b> datas, local e ingressos saem primeiro nos stories. 7.3K já seguem. <span>@horney.band ↗</span></a></li>
+                        <li><a href="https://open.spotify.com/artist/5zJVmieIGGEeOKbIrXmhZi" target="_blank" rel="noopener"><b>OUVE-SE</b> HORNEY no Spotify. 1.8K ouvintes/mês e cabe mais um. <span>Artista no Spotify ↗</span></a></li>
+                        <li><a href="https://www.youtube.com/@bandaHorney" target="_blank" rel="noopener"><b>ASSISTE-SE</b> Fool's Game e 38 segundos de suor ao vivo. <span>@bandaHorney ↗</span></a></li>
+                        <li><a href="https://www.tiktok.com/@horney.band" target="_blank" rel="noopener"><b>TIKTOK</b> o barulho em vídeo curto. <span>@horney.band ↗</span></a></li>
+                        <li><a href="https://www.threads.com/@horney.band" target="_blank" rel="noopener"><b>THREADS</b> a HORNEY em texto. <span>@horney.band ↗</span></a></li>
+                        <li><a href="https://ps.algohits.com/horney-anti-raso" target="_blank" rel="noopener"><b>ACHA-SE</b> ANTI-RASO em todas as plataformas. <span>Todas as plataformas ↗</span></a></li>
+                        <li><a href="#ch-6" data-goto="6"><b>VENDE-SE</b> nada ainda. Merch EM BREVE, sem preço. <span>CH 06 · TELEVENDAS ▸</span></a></li>
+                      </ul>
+                    </section>
+                    <p class="cc8__foot">© 2026 HORNEY · Joinville / SC · TV HORNEY é uma homenagem (não oficial) à TV de antigamente.</p>
+                  </div>
+                </section>
+
+                <!-- =================== CH 00 · VÍDEO (AV) =================== -->
+                <section class="channel ch0" id="ch-0" data-n="0" data-name="VÍDEO (AV)" data-glow="#1b3bff" data-cc="[ENTRADA AV · VIDEOCASSETE] tela azul. Duas fitas na estante: Fool's Game, clipe oficial, e HORNEY ao vivo, 38 segundos. Escolha a fita e aperte PLAY. [chiado de fita]" aria-labelledby="t0">
+                  <div class="ch__inner">
+                    <header class="av__head">
+                      <h2 class="av__title" id="t0" tabindex="-1">AV 1 <span>· VÍDEO</span></h2>
+                      <p class="av__mode" id="av-mode" role="status">■ STOP · INSIRA UMA FITA</p>
+                      <p class="prog" data-prog="0">NO AR: VÍDEO (AV)</p>
+                    </header>
+                    <div class="av__screen" id="av-screen">
+                      <p class="av__empty" id="av-empty">SEM FITA<br><small>escolha uma fita na estante ↓</small></p>
+                    </div>
+                    <div class="vcr" aria-hidden="true">
+                      <span class="vcr__brand">HORNEY<b>VCR</b> · 4 HEAD HI-FI</span>
+                      <span class="vcr__slot" id="vcr-slot"><i id="vcr-tape"></i></span>
+                      <span class="vcr__clock" id="vcr-clock">--:--</span>
+                    </div>
+                    <ul class="shelf" aria-label="Estante de fitas">
+                      <li><button class="tape" type="button" data-tape="0" aria-pressed="false"><span class="tape__side">FITA A · SP</span><b class="tape__title">Fool's Game</b><span class="tape__meta">clipe oficial (2022), dir. Rique Duarte</span></button></li>
+                      <li><button class="tape tape--b" type="button" data-tape="1" aria-pressed="false"><span class="tape__side">FITA B · SP</span><b class="tape__title">HORNEY ao vivo</b><span class="tape__meta">ao vivo · 0:38 · 38 segundos de suor</span></button></li>
+                    </ul>
+                    <div class="av__foot">
+                      <button class="btn btn--small js-only" id="av-eject" type="button" disabled>⏏ EJETAR</button>
+                      <a class="btn btn--small" href="https://www.youtube.com/@bandaHorney" target="_blank" rel="noopener">canal @bandaHorney ↗</a>
+                    </div>
+                  </div>
+                </section>
+
+                <!-- =================== SEM SINAL =================== -->
+                <section class="channel chx" id="ch-x" data-n="-1" data-name="SEM SINAL" data-glow="#9a9a9a" data-cc="[CHIADO] tela de estática. Nenhuma emissora neste canal." aria-labelledby="tx" hidden>
+                  <canvas class="chx__snow anim" id="snow" width="200" height="150" aria-hidden="true"></canvas>
+                  <div class="chx__box">
+                    <h2 class="chx__title" id="tx" tabindex="-1">SEM SINAL</h2>
+                    <p class="chx__n" id="chx-n">CH 09</p>
+                    <p class="chx__s">nenhuma emissora aqui. a TV HORNEY tá do 00 ao 08.</p>
+                    <a class="btn btn--small" href="#ch-1" data-goto="1">VOLTAR PRO CH 01</a>
+                  </div>
+                </section>
+
+              </main>
+
+              <canvas class="static" id="static" aria-hidden="true"></canvas>
+              <div class="scanlines" aria-hidden="true"></div>
+              <div class="flash" aria-hidden="true"></div>
+
+              <div class="osd" id="osd" aria-hidden="true">
+                <p class="osd__num" id="osd-num">CH 01</p>
+                <p class="osd__name" id="osd-name">TV HORNEY</p>
+              </div>
+              <p class="osd-clock" aria-hidden="true"><span class="osd-clock__l" id="osd-clock-l">HORÁRIO DE BRASÍLIA</span> <span class="osd-clock__t" id="osd-clock">--:--</span></p>
+              <div class="osd-vol" id="osd-vol" aria-hidden="true">
+                <span class="osd-vol__k" id="osd-vol-k">VOLUME</span>
+                <span class="osd-vol__bar" id="osd-vol-bar"></span>
+                <span class="osd-vol__n" id="osd-vol-n">05</span>
+              </div>
+              <div class="tube-strip" aria-hidden="true">
+                <p class="more-cue" id="more-cue">▼ ROLA<span> PRA VER MAIS</span></p>
+                <p class="bug"><img src="../assets/eye-sun.png" alt="" width="300" height="300"><span>TV HORNEY</span></p>
+              </div>
+              <p class="cc-line" id="cc-line" hidden></p>
+
+              <div class="infobar" id="infobar" role="status" aria-live="polite" hidden>
+                <div class="infobar__ch"><b id="info-n">01</b><span id="info-name">TV HORNEY</span></div>
+                <div class="infobar__main">
+                  <p class="infobar__prog"><span class="ci" id="info-ci" data-ci="L" role="img" aria-label="Classificação L: livre">L</span> <b id="info-prog">Horário Nobre HORNEY</b> <span id="info-time">18:00–00:00</span></p>
+                  <p class="infobar__syn" id="info-syn"></p>
+                  <p class="infobar__next">A SEGUIR: <span id="info-next"></span></p>
+                </div>
+              </div>
+
+              <div class="signoff" id="signoff" hidden>
+                <div class="signoff__bars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+                <div class="signoff__low" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+                <div class="signoff__box">
+                  <p class="signoff__k">TV HORNEY · CANAL 01</p>
+                  <p class="signoff__t">FIM DA TRANSMISSÃO</p>
+                  <p class="signoff__s">mentira: a gente é 24 horas. aperte qualquer canal pra voltar.</p>
+                  <button class="btn btn--small" id="signoff-back" type="button">VOLTAR PRO AR</button>
+                </div>
+              </div>
+            </div>
+            <div class="afterglow" aria-hidden="true"></div>
+            <p class="standby" aria-hidden="true">STANDBY<br><small>aperte ⏻ ou um número</small></p>
+            <div class="glass" aria-hidden="true"></div>
+          </div>
+        </div>
+        <div class="tv__chin" aria-hidden="true">
+          <span class="tv__brand">HORNEY<b>VISION</b></span>
+          <span class="tv__grille"></span>
+          <span class="tv__model">TRINI-TONE 29" · STEREO</span>
+          <span class="tv__led" id="led"></span>
+        </div>
+      </div>
+      <div class="rack" aria-hidden="true">
+        <span class="rack__vcr">HORNEY<b>VCR</b><i id="rack-clock">--:--</i></span>
+        <span class="rack__tapes"><i></i><i></i><i></i></span>
+      </div>
+    </div>
+
+    <nav class="remote js-only" id="remote" aria-label="Controle remoto">
+      <div class="remote__bar">
+        <button class="rk rk--power" id="btn-power" type="button" aria-pressed="false" aria-label="Ligar a TV (P). Segure pra encerrar a transmissão">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 3v8"/><path d="M6.3 7.2a8 8 0 1 0 11.4 0"/></svg>
+        </button>
+        <button class="rk rk--ch" id="btn-chdn" type="button" aria-label="CH ▼: canal anterior (seta esquerda)">CH ▼</button>
+        <button class="rk rk--ch" id="btn-chup" type="button" aria-label="CH ▲: próximo canal (seta direita)">CH ▲</button>
+        <button class="rk rk--guia" id="btn-guia" type="button" aria-haspopup="dialog" aria-label="Guia de programação (G)">GUIA</button>
+        <button class="rk rk--sheet" id="btn-sheet" type="button" aria-expanded="false" aria-controls="remote-more">⋯ <span>MAIS</span></button>
+      </div>
+      <div class="remote__more" id="remote-more">
+        <div class="remote__nums" role="group" aria-label="Teclado numérico">
+          <button class="rk rk--num" type="button" data-digit="1" aria-label="1 · TV HORNEY">1</button>
+          <button class="rk rk--num" type="button" data-digit="2" aria-label="2 · Jornal HORNEY">2</button>
+          <button class="rk rk--num" type="button" data-digit="3" aria-label="3 · Disk HORNEY">3</button>
+          <button class="rk rk--num" type="button" data-digit="4" aria-label="4 · Sessão ANTI-RASO">4</button>
+          <button class="rk rk--num" type="button" data-digit="5" aria-label="5 · Teletexto">5</button>
+          <button class="rk rk--num" type="button" data-digit="6" aria-label="6 · Televendas">6</button>
+          <button class="rk rk--num" type="button" data-digit="7" aria-label="7 · Disk Olho 0900">7</button>
+          <button class="rk rk--num" type="button" data-digit="8" aria-label="8 · Canal Comunitário">8</button>
+          <button class="rk rk--num" type="button" data-digit="9" aria-label="9 · sem emissora">9</button>
+          <button class="rk rk--fn" id="btn-last" type="button" aria-label="Último canal (U)">ÚLT</button>
+          <button class="rk rk--num" type="button" data-digit="0" aria-label="0 · Vídeo AV">0</button>
+          <button class="rk rk--fn" id="btn-cc" type="button" aria-pressed="false" aria-label="Legenda CC (C)">CC</button>
+        </div>
+        <div class="remote__vol">
+          <button class="rk rk--vol" id="btn-volup" type="button" aria-label="VOL +: aumentar volume (+)">VOL +</button>
+          <button class="rk rk--vol" id="btn-voldn" type="button" aria-label="VOL −: diminuir volume (−)">VOL −</button>
+        </div>
+        <div class="remote__fn">
+          <button class="rk rk--fn" id="btn-mute" type="button" aria-pressed="true" aria-label="MUTE: som mudo (M)">MUTE</button>
+          <button class="rk rk--fn" id="btn-info" type="button" aria-label="Info do programa (I)">INFO</button>
+          <button class="rk rk--fn" id="btn-menu" type="button" aria-haspopup="dialog" aria-label="Menu">MENU</button>
+        </div>
+        <p class="remote__brand" aria-hidden="true"><img src="../assets/eye-sun.png" alt="" width="300" height="300"><span>HORNEY</span></p>
+      </div>
+    </nav>
+  </div>
+
+  <dialog class="guia" id="guia" aria-labelledby="guia-title">
+    <div class="guia__head">
+      <h2 class="guia__title" id="guia-title">GUIA DE PROGRAMAÇÃO</h2>
+      <p class="guia__time" id="guia-time"></p>
+      <button class="btn btn--small" type="button" data-close>FECHAR ✕</button>
+    </div>
+    <table class="guia__grid">
+      <thead><tr><th scope="col">CANAL</th><th scope="col">AGORA</th><th scope="col">A SEGUIR</th></tr></thead>
+      <tbody id="guia-body"></tbody>
+    </table>
+    <p class="guia__foot">↑ ↓ navega · Enter sintoniza · Esc fecha · horário do teu relógio</p>
+  </dialog>
+
+  <dialog class="menu" id="menu" aria-labelledby="menu-title">
+    <h2 class="menu__title" id="menu-title">MENU · TV HORNEY</h2>
+    <ul class="menu__list">
+      <li><button type="button" data-act="guia">Guia de programação <kbd>G</kbd></button></li>
+      <li><button type="button" data-act="info">Info do programa <kbd>I</kbd></button></li>
+      <li><button type="button" data-act="cc" id="menu-cc">Legenda CC: desligada <kbd>C</kbd></button></li>
+      <li><button type="button" data-act="mute" id="menu-mute">Som: mudo <kbd>M</kbd></button></li>
+      <li><button type="button" data-act="signoff">Encerrar transmissão (barras coloridas)</button></li>
+    </ul>
+    <h3 class="menu__h">ATALHOS</h3>
+    <dl class="menu__keys">
+      <div><dt><kbd>0</kbd>–<kbd>9</kbd></dt><dd>canal (dois dígitos também: 0 7)</dd></div>
+      <div><dt><kbd>←</kbd> <kbd>→</kbd></dt><dd>canal anterior / próximo</dd></div>
+      <div><dt><kbd>↑</kbd> <kbd>↓</kbd></dt><dd>rola o canal, troca na borda</dd></div>
+      <div><dt><kbd>+</kbd> <kbd>−</kbd></dt><dd>volume</dd></div>
+      <div><dt><kbd>U</kbd></dt><dd>último canal</dd></div>
+      <div><dt><kbd>P</kbd></dt><dd>liga / desliga (segure o ⏻ pra barras)</dd></div>
+    </dl>
+    <button class="btn btn--small" type="button" data-close>FECHAR ✕</button>
+  </dialog>
+
+  <p class="sr-only" id="announcer" aria-live="polite"></p>
+
+  <script src="../assets/oraculo.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>

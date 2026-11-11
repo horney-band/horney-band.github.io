@@ -1,0 +1,720 @@
+<!--
+  HORNEY — CONCEITO 15: "O ORÁCULO — o Olho que responde"
+
+  Rationale:
+  A Duda pediu: "fazer o olho interativo meio que um oráculo, com interação real pros fãs deixarem
+  mensagens ou perguntarem alguma coisa". O olho-sol do H◎RNEY do round 1 (09 · The Eye) só olhava.
+  Aqui ele escuta, pensa, responde e lembra. O site inteiro é uma consulta: o fã pergunta ao olho
+  (respostas reais de Horney.oraculo.ask), e o conteúdo da banda é o que o oráculo revela —
+  seis arcanos de tarô em xilogravura (disco, estrada, visão, bando, oferenda, mensageiro) que abrem
+  o conteúdo de verdade. "Tirar três cartas" faz uma tiragem passado/presente/futuro com 18 leituras
+  que terminam em chamadas reais. Rolar mergulha pela pupila até O Fundo, onde as mensagens dos fãs
+  (Horney.mural, compartilhado com os outros conceitos) flutuam como pontos de luz — e quem deixa uma
+  oferenda vê o olho subir, ler o texto linha por linha e responder.
+
+  Techniques:
+  - WebGL1 cru (sem three.js): UM triângulo fullscreen + UM fragment shader estendido do round 1
+    (disco amarelo em retícula, raios desenhados à mão, olho amendoado, íris em fbm, túnel log-polar
+    dentro da pupila) com novos uniforms de estado: pálpebra, ondulação da íris ao digitar, rotação da
+    íris e virada de cor magenta/azul no "pensa", subida do fundo ("lê").
+  - Máquina de estados do olho (vigia · escuta · pensa · responde · lê · dorme) com amortecimento
+    independente de frame rate; o shader só renderiza enquanto algo muda (rAF começa num evento e para
+    quando assenta), dorme após 40 s parado, pausa com aba oculta. DPR limitado.
+  - Fallback: sem WebGL ou com prefers-reduced-motion, um olho em SVG inline com os mesmos estados via
+    variáveis CSS (só transform/opacity).
+  - Arcanos em SVG inline (símbolos + padrões de hachura), baralho em leque com roving tabindex
+    (setas + Enter), deep-link #arcano-N, <dialog> nativo com flip 3D; tiragem embaralhada.
+  - Mural: luzes à deriva (CSS transform, pausadas fora da tela/aba oculta/olho dormindo), lista
+    acessível, subscribe ao vivo, tudo de fã renderizado com textContent.
+  - Web Audio opcional (drone + piscada), desligado por padrão. Giroscópio no iOS só após toque.
+  - Facades click-to-load para YouTube; Spotify do ANTI-RASO (420px) carrega quando O DISCO abre.
+-->
+<!doctype html>
+<html lang="pt-BR" data-eye="dorme">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>H◎RNEY — O ORÁCULO · pergunte ao olho</title>
+  <meta name="description" content="HORNEY: alt/indie rock de Joinville (SC). Pergunte ao olho: ele responde, tira as cartas do ANTI-RASO e guarda a voz dos fãs no fundo.">
+  <meta name="theme-color" content="#070605">
+  <link rel="icon" href="../assets/eye.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=IBM+Plex+Mono:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap">
+  <link rel="stylesheet" href="style.css">
+  <script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+  <a class="pular" href="#pergunta">Pular para a pergunta</a>
+
+  <!-- ===================== sprite: padrões de xilogravura + ilustrações dos arcanos ===================== -->
+  <svg class="sprite" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <pattern id="p-hatch" width="3" height="3" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+        <rect width="1" height="3" fill="#0b0907"/>
+      </pattern>
+      <pattern id="p-hatch-fino" width="3.4" height="3.4" patternUnits="userSpaceOnUse" patternTransform="rotate(-35)">
+        <rect width="0.6" height="3.4" fill="#0b0907"/>
+      </pattern>
+      <pattern id="p-cruz" width="3" height="3" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+        <rect width="0.8" height="3" fill="#0b0907"/>
+        <rect width="3" height="0.8" fill="#0b0907"/>
+      </pattern>
+      <pattern id="p-pontos" width="3" height="3" patternUnits="userSpaceOnUse" patternTransform="rotate(30)">
+        <circle cx="1.5" cy="1.5" r="0.75" fill="#0b0907"/>
+      </pattern>
+      <pattern id="p-scan" width="4" height="2.2" patternUnits="userSpaceOnUse">
+        <rect width="4" height="0.8" fill="#0b0907" opacity="0.4"/>
+      </pattern>
+      <clipPath id="clip-amendoa" clipPathUnits="userSpaceOnUse">
+        <path d="M-64 0 Q0 -70 64 0 Q0 54 -64 0Z"/>
+      </clipPath>
+
+      <!-- o olho-sol do logo, centrado em 0,0 -->
+      <symbol id="olhinho" viewBox="-50 -50 100 100">
+        <circle r="47" fill="#f2a900" stroke="#0b0907" stroke-width="3"/>
+        <polygon fill="#0b0907" points="0.0,-41.3 6.0,-28.0 17.7,-39.8 16.7,-23.0 31.8,-28.6 25.3,-14.6 37.5,-12.2 29.4,-3.1 39.0,4.1 27.9,9.1 34.2,19.7 21.2,19.1 24.7,34.0 12.3,27.7 8.3,39.0 0.0,28.8 -9.0,42.4 -12.4,27.9 -25.3,34.8 -21.7,19.6 -39.7,22.9 -27.0,8.8 -44.8,4.7 -28.8,-3.0 -38.1,-12.4 -24.8,-14.3 -30.6,-27.5 -17.8,-24.5 -16.4,-36.8 -6.2,-29.0"/>
+        <path d="M-27 0 Q0 -30 27 0 Q0 23 -27 0Z" fill="#f4ecdc" stroke="#0b0907" stroke-width="2"/>
+        <circle r="9.5" fill="#f2a900" stroke="#0b0907" stroke-width="1.6"/>
+        <circle r="5" fill="#0b0907"/>
+        <circle cx="-3" cy="-3.2" r="1.8" fill="#fff"/>
+      </symbol>
+
+      <!-- verso das cartas -->
+      <symbol id="verso" viewBox="0 0 100 130">
+        <rect x="6" y="6" width="88" height="118" fill="none" stroke="#f2a900" stroke-width="1.4"/>
+        <rect x="10" y="10" width="80" height="110" fill="none" stroke="#f2a900" stroke-width="0.6" stroke-dasharray="2 2"/>
+        <g stroke="#f2a900" stroke-width="1.1">
+          <line x1="50" y1="65" x2="50" y2="16"/><line x1="50" y1="65" x2="50" y2="114"/>
+          <line x1="50" y1="65" x2="14" y2="65"/><line x1="50" y1="65" x2="86" y2="65"/>
+          <line x1="50" y1="65" x2="20" y2="30"/><line x1="50" y1="65" x2="80" y2="30"/>
+          <line x1="50" y1="65" x2="20" y2="100"/><line x1="50" y1="65" x2="80" y2="100"/>
+        </g>
+        <use href="#olhinho" x="28" y="43" width="44" height="44"/>
+        <g fill="#f2a900">
+          <path d="M18 18 l1.5 4 4 1.5 -4 1.5 -1.5 4 -1.5 -4 -4 -1.5 4 -1.5z"/>
+          <path d="M82 104 l1.5 4 4 1.5 -4 1.5 -1.5 4 -1.5 -4 -4 -1.5 4 -1.5z"/>
+          <path d="M80 18 l1 2.6 2.6 1 -2.6 1 -1 2.6 -1 -2.6 -2.6 -1 2.6 -1z"/>
+          <path d="M20 106 l1 2.6 2.6 1 -2.6 1 -1 2.6 -1 -2.6 -2.6 -1 2.6 -1z"/>
+        </g>
+      </symbol>
+
+      <!-- I · O DISCO: a porta no mar, o olho, o raio -->
+      <symbol id="ilus-1" viewBox="0 0 100 130">
+        <rect x="0" y="0" width="100" height="84" fill="url(#p-hatch-fino)"/>
+        <g stroke="#0b0907" stroke-width="1.3">
+          <line x1="50" y1="62" x2="2" y2="8"/><line x1="50" y1="62" x2="22" y2="0"/>
+          <line x1="50" y1="62" x2="78" y2="0"/><line x1="50" y1="62" x2="98" y2="8"/>
+          <line x1="50" y1="62" x2="0" y2="40"/><line x1="50" y1="62" x2="100" y2="40"/>
+        </g>
+        <path d="M14 6 L6 26 L12 26 L4 46 L20 22 L13 22 L20 6Z" fill="#f2a900" stroke="#0b0907" stroke-width="1.6" stroke-linejoin="round"/>
+        <path d="M88 10 L80 28 L86 28 L79 44 L94 24 L87 24 L93 10Z" fill="#f2a900" stroke="#0b0907" stroke-width="1.6" stroke-linejoin="round"/>
+        <rect x="32" y="30" width="36" height="64" fill="#0b0907"/>
+        <rect x="37" y="35" width="26" height="56" fill="#efe6d2"/>
+        <rect x="37" y="35" width="26" height="56" fill="url(#p-pontos)" opacity="0.35"/>
+        <use href="#olhinho" x="36" y="49" width="28" height="28"/>
+        <path d="M68 30 L84 37 L84 99 L68 94Z" fill="#efe6d2" stroke="#0b0907" stroke-width="2"/>
+        <path d="M68 30 L84 37 L84 99 L68 94Z" fill="url(#p-hatch)"/>
+        <circle cx="72" cy="64" r="1.6" fill="#0b0907"/>
+        <rect x="0" y="86" width="100" height="44" fill="#0b0907"/>
+        <g fill="none" stroke="#efe6d2" stroke-width="1.6" stroke-linecap="round">
+          <path d="M0 92 q6 -5 12 0 t12 0 t12 0 t12 0 t12 0 t12 0 t12 0 t12 0 t12 0"/>
+          <path d="M-6 102 q6 -5 12 0 t12 0 t12 0 t12 0 t12 0 t12 0 t12 0 t12 0 t12 0"/>
+          <path d="M0 112 q6 -5 12 0 t12 0 t12 0 t12 0 t12 0 t12 0 t12 0 t12 0 t12 0"/>
+          <path d="M-6 122 q6 -5 12 0 t12 0 t12 0 t12 0 t12 0 t12 0 t12 0 t12 0 t12 0"/>
+        </g>
+        <path d="M30 92 q10 -6 20 -1 q10 -5 22 1" fill="none" stroke="#f2a900" stroke-width="1.4"/>
+      </symbol>
+
+      <!-- II · A ESTRADA: o sol-olho nascendo no fim da estrada -->
+      <symbol id="ilus-2" viewBox="0 0 100 130">
+        <g stroke="#0b0907" stroke-width="1.2">
+          <line x1="50" y1="56" x2="50" y2="2"/><line x1="50" y1="56" x2="18" y2="4"/><line x1="50" y1="56" x2="82" y2="4"/>
+          <line x1="50" y1="56" x2="0" y2="22"/><line x1="50" y1="56" x2="100" y2="22"/>
+          <line x1="50" y1="56" x2="0" y2="48"/><line x1="50" y1="56" x2="100" y2="48"/>
+        </g>
+        <path d="M24 64 A26 26 0 0 1 76 64Z" fill="#efe6d2"/>
+        <use href="#olhinho" x="28" y="34" width="44" height="44"/>
+        <rect x="0" y="64" width="100" height="66" fill="url(#p-hatch)"/>
+        <line x1="0" y1="64" x2="100" y2="64" stroke="#0b0907" stroke-width="2"/>
+        <path d="M45 64 L55 64 L98 130 L2 130Z" fill="#0b0907"/>
+        <g fill="#f2a900">
+          <path d="M49.4 70 L50.6 70 L50.9 76 L49.1 76Z"/>
+          <path d="M49 82 L51 82 L51.6 92 L48.4 92Z"/>
+          <path d="M48.4 100 L51.6 100 L52.6 116 L47.4 116Z"/>
+        </g>
+        <g stroke="#0b0907" stroke-width="1.6" stroke-linecap="round">
+          <line x1="14" y1="58" x2="14" y2="96"/><line x1="8" y1="64" x2="20" y2="64"/>
+          <line x1="28" y1="60" x2="28" y2="80"/><line x1="24" y1="64" x2="32" y2="64"/>
+          <line x1="86" y1="58" x2="86" y2="96"/><line x1="80" y1="64" x2="92" y2="64"/>
+        </g>
+        <path d="M14 66 Q21 70 28 66 M86 66 Q78 72 70 68" fill="none" stroke="#0b0907" stroke-width="0.8"/>
+      </symbol>
+
+      <!-- III · A VISÃO: a TV quebrada com o olho na tela -->
+      <symbol id="ilus-3" viewBox="0 0 100 130">
+        <g stroke="#0b0907" stroke-width="1.1">
+          <line x1="50" y1="66" x2="0" y2="16"/><line x1="50" y1="66" x2="100" y2="16"/>
+          <line x1="50" y1="66" x2="0" y2="110"/><line x1="50" y1="66" x2="100" y2="110"/>
+          <line x1="50" y1="66" x2="0" y2="66"/><line x1="50" y1="66" x2="100" y2="66"/>
+        </g>
+        <path d="M50 38 L32 12 M50 38 L70 8" stroke="#0b0907" stroke-width="2" stroke-linecap="round"/>
+        <circle cx="32" cy="12" r="2.4" fill="#0b0907"/><circle cx="70" cy="8" r="2.4" fill="#0b0907"/>
+        <rect x="12" y="38" width="76" height="60" rx="7" fill="#0b0907"/>
+        <rect x="18" y="44" width="52" height="46" rx="7" fill="#efe6d2"/>
+        <use href="#olhinho" x="25" y="48" width="38" height="38"/>
+        <rect x="18" y="44" width="52" height="46" rx="7" fill="url(#p-scan)"/>
+        <path d="M22 56 L34 62 L30 68 L44 74 L40 80 L56 88" fill="none" stroke="#0b0907" stroke-width="1.8" stroke-linejoin="round"/>
+        <path d="M22 56 L34 62 L30 68 L44 74 L40 80 L56 88" fill="none" stroke="#efe6d2" stroke-width="0.6" stroke-linejoin="round"/>
+        <circle cx="79" cy="54" r="4.5" fill="#f2a900" stroke="#efe6d2" stroke-width="1"/>
+        <circle cx="79" cy="68" r="4.5" fill="#f2a900" stroke="#efe6d2" stroke-width="1"/>
+        <g fill="#efe6d2"><rect x="75" y="78" width="8" height="1.4"/><rect x="75" y="81.5" width="8" height="1.4"/><rect x="75" y="85" width="8" height="1.4"/></g>
+        <path d="M24 98 L18 112 M76 98 L82 112" stroke="#0b0907" stroke-width="3" stroke-linecap="round"/>
+        <rect x="0" y="112" width="100" height="18" fill="url(#p-cruz)"/>
+        <line x1="0" y1="112" x2="100" y2="112" stroke="#0b0907" stroke-width="1.6"/>
+      </symbol>
+
+      <!-- IV · O BANDO: quatro salas, quatro bobos, um olho no meio -->
+      <symbol id="ilus-4" viewBox="0 0 100 130">
+        <rect x="10" y="14" width="80" height="100" fill="#efe6d2" stroke="#0b0907" stroke-width="2.6"/>
+        <rect x="12" y="16" width="37" height="47" fill="url(#p-hatch)"/>
+        <rect x="51" y="16" width="37" height="47" fill="#f2a900"/>
+        <rect x="12" y="65" width="37" height="47" fill="#f2a900"/>
+        <rect x="51" y="65" width="37" height="47" fill="url(#p-cruz)"/>
+        <line x1="50" y1="14" x2="50" y2="114" stroke="#0b0907" stroke-width="2.6"/>
+        <line x1="10" y1="64" x2="90" y2="64" stroke="#0b0907" stroke-width="2.6"/>
+        <g fill="#0b0907">
+          <circle cx="30.5" cy="36" r="6"/><path d="M19.5 63 Q19.5 46 30.5 46 Q41.5 46 41.5 63Z"/>
+          <circle cx="69.5" cy="36" r="6"/><path d="M58.5 63 Q58.5 46 69.5 46 Q80.5 46 80.5 63Z"/>
+          <circle cx="30.5" cy="85" r="6"/><path d="M19.5 112 Q19.5 95 30.5 95 Q41.5 95 41.5 112Z"/>
+        </g>
+        <g fill="#efe6d2" stroke="#0b0907" stroke-width="1.6">
+          <circle cx="69.5" cy="85" r="6"/><path d="M58.5 112 Q58.5 95 69.5 95 Q80.5 95 80.5 112Z"/>
+        </g>
+        <path d="M27 33 l2 2 M32 33 l2 2" stroke="#efe6d2" stroke-width="0.8"/>
+        <use href="#olhinho" x="38" y="52" width="24" height="24"/>
+      </symbol>
+
+      <!-- V · A OFERENDA: duas mãos oferecendo a camiseta do olho -->
+      <symbol id="ilus-5" viewBox="0 0 100 130">
+        <g stroke="#0b0907" stroke-width="1.1">
+          <line x1="50" y1="62" x2="50" y2="0"/><line x1="50" y1="62" x2="10" y2="4"/><line x1="50" y1="62" x2="90" y2="4"/>
+          <line x1="50" y1="62" x2="0" y2="34"/><line x1="50" y1="62" x2="100" y2="34"/>
+          <line x1="50" y1="62" x2="0" y2="72"/><line x1="50" y1="62" x2="100" y2="72"/>
+        </g>
+        <path d="M28 40 L41 33 Q50 40 59 33 L72 40 L82 56 L70 61 L70 94 L30 94 L30 61 L18 56Z" fill="#0b0907" stroke="#0b0907" stroke-width="2" stroke-linejoin="round"/>
+        <path d="M41 33 Q50 40 59 33" fill="none" stroke="#efe6d2" stroke-width="1"/>
+        <use href="#olhinho" x="38" y="50" width="24" height="24"/>
+        <path d="M10 102 Q24 92 40 98 L50 100 L60 98 Q76 92 90 102 L90 114 Q70 124 50 116 Q30 124 10 114Z" fill="#efe6d2" stroke="#0b0907" stroke-width="2" stroke-linejoin="round"/>
+        <path d="M10 108 Q28 112 44 106 M90 108 Q72 112 56 106" fill="none" stroke="#0b0907" stroke-width="1.2"/>
+        <path d="M12 110 Q30 120 48 114 L48 116 Q30 124 12 114Z" fill="url(#p-hatch)"/>
+        <path d="M88 110 Q70 120 52 114 L52 116 Q70 124 88 114Z" fill="url(#p-hatch)"/>
+        <g fill="#f2a900" stroke="#0b0907" stroke-width="0.8">
+          <path d="M14 22 l2 5.5 5.5 2 -5.5 2 -2 5.5 -2 -5.5 -5.5 -2 5.5 -2z"/>
+          <path d="M86 20 l1.6 4.4 4.4 1.6 -4.4 1.6 -1.6 4.4 -1.6 -4.4 -4.4 -1.6 4.4 -1.6z"/>
+          <path d="M84 80 l1.4 3.6 3.6 1.4 -3.6 1.4 -1.4 3.6 -1.4 -3.6 -3.6 -1.4 3.6 -1.4z"/>
+        </g>
+      </symbol>
+
+      <!-- VI · O MENSAGEIRO: o envelope com asas e o raio -->
+      <symbol id="ilus-6" viewBox="0 0 100 130">
+        <rect x="0" y="96" width="100" height="34" fill="url(#p-hatch-fino)"/>
+        <g stroke="#0b0907" stroke-width="1.4" stroke-linecap="round">
+          <line x1="8" y1="104" x2="30" y2="104"/><line x1="16" y1="112" x2="44" y2="112"/>
+          <line x1="58" y1="106" x2="92" y2="106"/><line x1="64" y1="118" x2="90" y2="118"/>
+        </g>
+        <path d="M58 4 L46 30 L55 30 L43 52 L64 24 L55 24 L64 4Z" fill="#f2a900" stroke="#0b0907" stroke-width="1.8" stroke-linejoin="round"/>
+        <path d="M27 62 Q8 52 3 32 Q15 42 22 40 Q11 31 11 18 Q24 33 29 36 Q22 26 24 14 Q32 32 33 54Z" fill="#0b0907"/>
+        <path d="M73 62 Q92 52 97 32 Q85 42 78 40 Q89 31 89 18 Q76 33 71 36 Q78 26 76 14 Q68 32 67 54Z" fill="#0b0907"/>
+        <path d="M14 34 Q20 42 26 44 M86 34 Q80 42 74 44" fill="none" stroke="#efe6d2" stroke-width="0.8"/>
+        <rect x="26" y="52" width="48" height="34" fill="#efe6d2" stroke="#0b0907" stroke-width="2.4"/>
+        <rect x="26" y="70" width="48" height="16" fill="url(#p-hatch)" opacity="0.6"/>
+        <path d="M26 52 L50 72 L74 52" fill="none" stroke="#0b0907" stroke-width="2.4" stroke-linejoin="round"/>
+        <use href="#olhinho" x="42" y="64" width="16" height="16"/>
+      </symbol>
+    </defs>
+  </svg>
+
+  <canvas id="olho-gl" class="olho-gl" aria-hidden="true"></canvas>
+  <div class="grao" aria-hidden="true"></div>
+
+  <a class="voltar" href="../index.html"><span aria-hidden="true">←</span><span class="voltar__txt"> todos os conceitos</span></a>
+
+  <header class="topo">
+    <a class="topo__marca" href="#vigilia" aria-label="HORNEY — o oráculo, voltar ao olho">
+      <img src="../assets/logo-wordmark.png" alt="" width="1200" height="519">
+      <span class="topo__sub" aria-hidden="true">o oráculo</span>
+    </a>
+    <nav class="topo__nav" aria-label="Ferramentas do oráculo">
+      <button class="topo__btn" id="btn-tiragem" type="button" aria-haspopup="dialog">
+        <span class="topo__ico" aria-hidden="true">✦</span><span class="topo__lbl">tirar três cartas</span>
+      </button>
+      <a class="topo__btn" href="#fundo">
+        <span class="topo__ico" aria-hidden="true">◎</span><span class="topo__lbl">o fundo</span>
+      </a>
+      <button class="topo__btn" id="btn-consultas" type="button" aria-haspopup="dialog">
+        <span class="topo__ico" aria-hidden="true">☰</span><span class="topo__lbl">suas consultas</span>
+        <span class="topo__badge" id="consultas-badge" hidden>0</span>
+      </button>
+      <button class="topo__btn topo__btn--som" id="btn-som" type="button" aria-pressed="false">
+        <span class="topo__ico" aria-hidden="true">♪</span><span class="topo__lbl">som: <span id="som-estado">off</span></span>
+      </button>
+    </nav>
+  </header>
+
+  <main id="conteudo">
+    <!-- ================================ VIGÍLIA ================================ -->
+    <section class="vigilia" id="vigilia" aria-labelledby="vigilia-titulo">
+      <h1 class="sr-only" id="vigilia-titulo">HORNEY — o oráculo. Alt/indie rock de Joinville (SC). Pergunte ao olho.</h1>
+
+      <div class="vigilia__olho">
+        <div class="olho-slot" id="olho-slot">
+          <svg class="olho-svg" viewBox="-100 -100 200 200" aria-hidden="true" focusable="false">
+            <circle r="96" fill="#f2a900"/>
+            <circle r="96" fill="url(#p-pontos)" opacity="0.28"/>
+            <circle r="94" fill="none" stroke="#0b0907" stroke-width="4"/>
+            <polygon class="olho-svg__raios" fill="#0b0907" transform="scale(2)" points="0.0,-41.3 6.0,-28.0 17.7,-39.8 16.7,-23.0 31.8,-28.6 25.3,-14.6 37.5,-12.2 29.4,-3.1 39.0,4.1 27.9,9.1 34.2,19.7 21.2,19.1 24.7,34.0 12.3,27.7 8.3,39.0 0.0,28.8 -9.0,42.4 -12.4,27.9 -25.3,34.8 -21.7,19.6 -39.7,22.9 -27.0,8.8 -44.8,4.7 -28.8,-3.0 -38.1,-12.4 -24.8,-14.3 -30.6,-27.5 -17.8,-24.5 -16.4,-36.8 -6.2,-29.0"/>
+            <g clip-path="url(#clip-amendoa)">
+              <rect x="-70" y="-40" width="140" height="80" fill="#f1e8d6"/>
+              <g class="olho-svg__olhar">
+                <g class="olho-svg__iris">
+                  <circle r="25" fill="#f2a900"/>
+                  <circle class="olho-svg__iris-pensa" r="25" fill="#ff2bd6"/>
+                  <g class="olho-svg__fibras" stroke="#7a3a00" stroke-width="1.2">
+                    <line x1="0" y1="-24" x2="0" y2="-11"/><line x1="0" y1="24" x2="0" y2="11"/>
+                    <line x1="-24" y1="0" x2="-11" y2="0"/><line x1="24" y1="0" x2="11" y2="0"/>
+                    <line x1="-17" y1="-17" x2="-8" y2="-8"/><line x1="17" y1="17" x2="8" y2="8"/>
+                    <line x1="17" y1="-17" x2="8" y2="-8"/><line x1="-17" y1="17" x2="-8" y2="8"/>
+                    <line x1="-9" y1="-22" x2="-4" y2="-10"/><line x1="9" y1="22" x2="4" y2="10"/>
+                    <line x1="22" y1="-9" x2="10" y2="-4"/><line x1="-22" y1="9" x2="-10" y2="4"/>
+                  </g>
+                  <circle r="25" fill="none" stroke="#0b0907" stroke-width="2.6"/>
+                </g>
+                <circle class="olho-svg__pupila" r="11" fill="#0b0907"/>
+                <circle cx="-8" cy="-8" r="4" fill="#fff"/>
+              </g>
+              <rect class="olho-svg__palpebra" x="-70" y="-118" width="140" height="82" fill="#0b0907"/>
+            </g>
+            <path d="M-64 0 Q0 -70 64 0 Q0 54 -64 0Z" fill="none" stroke="#0b0907" stroke-width="4"/>
+          </svg>
+          <button class="acordar" id="acordar" type="button" hidden>acordar o olho</button>
+        </div>
+        <p class="visao" id="visao">
+          <span class="visao__rotulo">visão do dia<span id="visao-data"></span></span>
+          <span class="visao__texto" id="visao-texto">o olho está abrindo…</span>
+        </p>
+      </div>
+
+      <div class="vigilia__consulta">
+        <img class="vigilia__marca" src="../assets/logo-wordmark.png" alt="HORNEY" width="1200" height="519" fetchpriority="high">
+        <p class="vigilia__eyebrow">alt / indie rock · Joinville · SC · Brasil · <a href="https://open.spotify.com/album/7EM81z5ydGQq04ZbkIE5aS" target="_blank" rel="noopener">ANTI-RASO — fora agora ↗</a></p>
+
+        <div class="resposta" id="resposta" hidden>
+          <p class="resposta__pergunta"><span class="resposta__rotulo">você perguntou</span> <span id="resposta-pergunta"></span></p>
+          <p class="resposta__texto" id="resposta-texto" aria-hidden="true"></p>
+          <div class="resposta__links" id="resposta-links"></div>
+          <div class="resposta__arcano" id="resposta-arcano" hidden>
+            <p class="resposta__rotulo">o olho revelou um arcano</p>
+            <button class="carta-mini" id="resposta-carta" type="button">
+              <span class="carta-mini__face">
+                <svg viewBox="0 0 100 130" aria-hidden="true" focusable="false"><use id="resposta-carta-use" href="#ilus-1"/></svg>
+              </span>
+              <span class="carta-mini__txt"><b id="resposta-carta-nome">I · O DISCO</b><span>abrir a leitura →</span></span>
+            </button>
+          </div>
+        </div>
+        <p class="sr-only" id="resposta-live" aria-live="polite"></p>
+
+        <form class="pergunta" id="pergunta-form" autocomplete="off">
+          <label class="pergunta__rotulo" for="pergunta">pergunte ao olho</label>
+          <div class="pergunta__linha">
+            <input class="pergunta__campo" id="pergunta" name="pergunta" type="text" maxlength="500" placeholder="o olho escuta…" enterkeyhint="send" spellcheck="false">
+            <button class="pergunta__enviar" type="submit">perguntar</button>
+          </div>
+          <label class="pergunta__publica"><input type="checkbox" id="publica" name="publica"> <span>deixar minha pergunta pública no fundo</span></label>
+        </form>
+
+        <ul class="sugestoes" aria-label="Perguntas sugeridas">
+          <li><button class="chip" type="button" data-q="quando tem show?">quando tem show?</button></li>
+          <li><button class="chip" type="button" data-q="o que eu escuto primeiro?">o que eu escuto primeiro?</button></li>
+          <li><button class="chip" type="button" data-q="vai dar certo?">vai dar certo?</button></li>
+          <li><button class="chip" type="button" data-q="quem são vocês?">quem são vocês?</button></li>
+        </ul>
+
+        <div class="vigilia__acoes">
+          <button class="botao botao--amarelo" id="abrir-tiragem" type="button" aria-haspopup="dialog">✦ tirar três cartas</button>
+          <a class="botao" id="mergulhar" href="#fundo">mergulhar no fundo ↓</a>
+          <button class="botao" id="btn-tilt" type="button" hidden>◎ o olho segue o celular</button>
+        </div>
+      </div>
+
+      <nav class="baralho" aria-labelledby="baralho-titulo">
+        <h2 class="baralho__titulo" id="baralho-titulo">os arcanos <span>· setas pra escolher, Enter pra abrir</span></h2>
+        <ol class="baralho__cartas" id="baralho">
+          <li><a class="carta" href="#arcano-1" data-arcano="1" style="--i:0"><span class="carta__face"><span class="carta__num">I</span><svg viewBox="0 0 100 130" aria-hidden="true" focusable="false"><use href="#ilus-1"/></svg><span class="carta__nome">O DISCO</span></span><span class="sr-only">: ANTI-RASO, faixas e discografia</span></a></li>
+          <li><a class="carta" href="#arcano-2" data-arcano="2" style="--i:1"><span class="carta__face"><span class="carta__num">II</span><svg viewBox="0 0 100 130" aria-hidden="true" focusable="false"><use href="#ilus-2"/></svg><span class="carta__nome">A ESTRADA</span></span><span class="sr-only">: shows</span></a></li>
+          <li><a class="carta" href="#arcano-3" data-arcano="3" style="--i:2"><span class="carta__face"><span class="carta__num">III</span><svg viewBox="0 0 100 130" aria-hidden="true" focusable="false"><use href="#ilus-3"/></svg><span class="carta__nome">A VISÃO</span></span><span class="sr-only">: vídeos</span></a></li>
+          <li><a class="carta" href="#arcano-4" data-arcano="4" style="--i:3"><span class="carta__face"><span class="carta__num">IV</span><svg viewBox="0 0 100 130" aria-hidden="true" focusable="false"><use href="#ilus-4"/></svg><span class="carta__nome">O BANDO</span></span><span class="sr-only">: a banda</span></a></li>
+          <li><a class="carta" href="#arcano-5" data-arcano="5" style="--i:4"><span class="carta__face"><span class="carta__num">V</span><svg viewBox="0 0 100 130" aria-hidden="true" focusable="false"><use href="#ilus-5"/></svg><span class="carta__nome">A OFERENDA</span></span><span class="sr-only">: merch</span></a></li>
+          <li><a class="carta" href="#arcano-6" data-arcano="6" style="--i:5"><span class="carta__face"><span class="carta__num">VI</span><svg viewBox="0 0 100 130" aria-hidden="true" focusable="false"><use href="#ilus-6"/></svg><span class="carta__nome">O MENSAGEIRO</span></span><span class="sr-only">: redes e contato</span></a></li>
+        </ol>
+      </nav>
+      <div class="dock-fim" id="dock-fim" aria-hidden="true"></div>
+    </section>
+
+    <!-- ================================ MERGULHO ================================ -->
+    <section class="mergulho" id="mergulho" aria-label="Mergulho pela pupila">
+      <p class="mergulho__linha mergulho__linha--1">“ANTI-RASO significa mergulhar fundo nas coisas.</p>
+      <p class="mergulho__linha mergulho__linha--2">É se recusar a viver apenas na superfície.”</p>
+      <p class="mergulho__credito">— Duda Maiolini, voz &amp; letras</p>
+    </section>
+
+    <!-- ================================ O FUNDO ================================ -->
+    <section class="fundo" id="fundo" aria-labelledby="fundo-titulo">
+      <header class="fundo__topo">
+        <p class="fundo__kicker">abaixo da pupila</p>
+        <h2 class="fundo__titulo" id="fundo-titulo">O FUNDO <em>— mural das vozes</em></h2>
+        <p class="fundo__lead">Cada luz é uma voz que desceu até aqui. Passa o mouse, toca ou usa as setas pra ouvir. O mural é o mesmo em todos os conceitos: o que você deixa aqui aparece lá.</p>
+        <div class="fundo__barra">
+          <p class="fundo__contagem" id="fundo-contagem" aria-live="polite"></p>
+          <button class="botao" id="btn-lista" type="button" aria-pressed="false" aria-controls="vozes-lista">ver todas em lista</button>
+        </div>
+      </header>
+
+      <div class="campo" id="campo">
+        <ul class="campo__luzes" id="luzes" aria-label="Vozes no fundo — setas pra navegar, Enter pra fixar"></ul>
+        <div class="voz-card" id="voz-card" aria-hidden="true" hidden>
+          <p class="voz-card__meta"><b id="voz-card-nome"></b> <span id="voz-card-canal"></span> <time id="voz-card-data"></time></p>
+          <p class="voz-card__texto" id="voz-card-texto"></p>
+        </div>
+        <p class="campo__status" id="campo-status" hidden></p>
+      </div>
+
+      <div class="vozes-lista" id="vozes-lista" hidden>
+        <h3 class="vozes-lista__titulo">todas as vozes, da mais nova pra mais antiga</h3>
+        <ol class="vozes-lista__itens" id="lista-vozes"></ol>
+      </div>
+
+      <form class="oferenda" id="oferenda" autocomplete="off" aria-labelledby="oferenda-titulo">
+        <h3 class="oferenda__titulo" id="oferenda-titulo">deixe uma oferenda</h3>
+        <p class="oferenda__lead">Um recado, uma confissão, um pedido de música. O olho sobe, lê linha por linha e responde. Depois a tua voz fica aqui embaixo, brilhando.</p>
+        <div class="oferenda__campos">
+          <label class="oferenda__rotulo" for="oferenda-nome">teu nome ou apelido</label>
+          <input class="oferenda__nome" id="oferenda-nome" name="nome" type="text" maxlength="40" placeholder="anônimo">
+          <label class="oferenda__rotulo" for="oferenda-texto">tua mensagem</label>
+          <textarea class="oferenda__texto" id="oferenda-texto" name="texto" rows="4" maxlength="500" placeholder="escreve fundo…" aria-describedby="oferenda-conta"></textarea>
+          <p class="oferenda__conta" id="oferenda-conta"><span id="oferenda-n">0</span>/500</p>
+        </div>
+        <button class="botao botao--amarelo" type="submit" id="oferenda-enviar">oferecer ao olho ◎</button>
+        <p class="oferenda__status" id="oferenda-status" role="status" aria-live="polite"></p>
+      </form>
+    </section>
+  </main>
+
+  <footer class="rodape">
+    <p class="rodape__segue">SEGUE A GENTE</p>
+    <ul class="rodape__links">
+      <li><a href="https://www.instagram.com/horney.band/" target="_blank" rel="noopener">Instagram @horney.band ↗</a></li>
+      <li><a href="https://www.tiktok.com/@horney.band" target="_blank" rel="noopener">TikTok @horney.band ↗</a></li>
+      <li><a href="https://www.threads.com/@horney.band" target="_blank" rel="noopener">Threads @horney.band ↗</a></li>
+      <li><a href="https://www.youtube.com/@bandaHorney" target="_blank" rel="noopener">YouTube @bandaHorney ↗</a></li>
+      <li><a href="https://open.spotify.com/artist/5zJVmieIGGEeOKbIrXmhZi" target="_blank" rel="noopener">♫ Artista no Spotify ↗</a></li>
+      <li><a href="https://ps.algohits.com/horney-anti-raso" target="_blank" rel="noopener">⚡ Todos os links ↗</a></li>
+    </ul>
+    <p class="rodape__fim">© 2026 HORNEY · Joinville / SC · o olho é da banda, as vozes são de vocês ⚡😈</p>
+  </footer>
+
+  <!-- ================================ MESA: os arcanos abertos ================================ -->
+  <dialog class="mesa" id="mesa" aria-labelledby="leitura-1-t">
+    <div class="mesa__barra">
+      <p class="mesa__kicker">arcano <span id="mesa-num">I</span> de VI</p>
+      <div class="mesa__nav">
+        <button class="mesa__btn" id="mesa-ant" type="button" aria-label="Arcano anterior">←</button>
+        <button class="mesa__btn" id="mesa-prox" type="button" aria-label="Próximo arcano">→</button>
+        <button class="mesa__btn mesa__btn--fechar" id="mesa-fechar" type="button">fechar ✕</button>
+      </div>
+    </div>
+    <div class="mesa__corpo">
+      <div class="mesa__carta" aria-hidden="true">
+        <div class="flip" id="mesa-flip">
+          <div class="flip__verso"><svg viewBox="0 0 100 130" focusable="false"><use href="#verso"/></svg></div>
+          <div class="flip__frente carta__face">
+            <span class="carta__num" id="mesa-carta-num">I</span>
+            <svg viewBox="0 0 100 130" focusable="false"><use id="mesa-carta-use" href="#ilus-1"/></svg>
+            <span class="carta__nome" id="mesa-carta-nome">O DISCO</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="mesa__leituras">
+        <!-- I · O DISCO -->
+        <article class="leitura" data-arcano="1" aria-labelledby="leitura-1-t" hidden>
+          <h2 class="leitura__titulo" id="leitura-1-t"><span>I</span> O DISCO</h2>
+          <p class="leitura__oraculo">O disco é a porta no meio do mar. Quem só olha a capa fica na superfície.</p>
+          <div class="disco">
+            <img class="disco__capa" src="../assets/cover-anti-raso.jpg" alt="Capa do EP ANTI-RASO: uma porta aberta no meio do mar, um olho gigante e raios em magenta e azul." width="640" height="640" loading="lazy">
+            <div class="disco__info">
+              <p class="leitura__rotulo">novo EP · fora agora</p>
+              <h3 class="disco__titulo">ANTI-RASO</h3>
+              <p class="disco__meta">EP · lançado em 30 de julho de 2026 · 4 faixas · 7.8/10 na Unglued</p>
+              <ol class="faixas">
+                <li><a href="https://open.spotify.com/track/7KteAUfbNB4CtxnbMudBad" target="_blank" rel="noopener"><span class="faixas__n">01</span><span class="faixas__t">OFF!</span><span class="faixas__d">3:19</span></a></li>
+                <li><a href="https://open.spotify.com/track/3SYpLwh1ChHyNEOn5TNOWy" target="_blank" rel="noopener"><span class="faixas__n">02</span><span class="faixas__t">QUEBRA-CABEÇA <em>feat. Dani Buarque</em></span><span class="faixas__d">4:20</span></a></li>
+                <li><a href="https://open.spotify.com/track/0aJtgSakI5r87CfAqNdDXP" target="_blank" rel="noopener"><span class="faixas__n">03</span><span class="faixas__t">MERGULHAR</span><span class="faixas__d">3:45</span></a></li>
+                <li><a href="https://open.spotify.com/track/2p5r9m60eSDxMGey8GRubR" target="_blank" rel="noopener"><span class="faixas__n">04</span><span class="faixas__t">ROMÂNTICA</span><span class="faixas__d">2:28</span></a></li>
+              </ol>
+              <p class="faixas__total">4 faixas · 13:53</p>
+            </div>
+          </div>
+          <div class="spotify" id="spotify-slot">
+            <p class="spotify__aviso" id="spotify-aviso">o player do Spotify carrega quando esta carta abre ⚡</p>
+          </div>
+          <div class="leitura__acoes">
+            <a class="botao botao--amarelo" href="https://open.spotify.com/album/7EM81z5ydGQq04ZbkIE5aS" target="_blank" rel="noopener">OUVIR ANTI-RASO ↗</a>
+            <a class="botao" href="https://ps.algohits.com/horney-anti-raso" target="_blank" rel="noopener">Todas as plataformas ↗</a>
+            <a class="botao" href="https://www.unglued.com.br/reviews/anti-raso" target="_blank" rel="noopener">Unglued: 7.8/10 ↗</a>
+          </div>
+          <blockquote class="citacao">
+            <p>“ANTI-RASO significa mergulhar fundo nas coisas. É se recusar a viver apenas na superfície.”</p>
+            <footer>— Duda Maiolini, voz &amp; letras</footer>
+          </blockquote>
+          <h3 class="leitura__sub">discografia</h3>
+          <ul class="discos">
+            <li>
+              <img src="../assets/cover-anti-raso.jpg" alt="Capa do EP ANTI-RASO: uma porta no mar, um olho gigante e raios em magenta e azul" width="640" height="640" loading="lazy">
+              <p><b>ANTI-RASO</b><span>EP · 2026</span></p>
+              <a href="https://open.spotify.com/album/7EM81z5ydGQq04ZbkIE5aS" target="_blank" rel="noopener">EP no Spotify ↗</a>
+            </li>
+            <li>
+              <img src="../assets/cover-mergulhar.jpg" alt="Capa do single MERGULHAR" width="640" height="640" loading="lazy">
+              <p><b>MERGULHAR</b><span>single · 2026 · também está no EP ANTI-RASO</span></p>
+              <a href="https://open.spotify.com/album/5jJ1py37M3i7qaZgkOOf4V" target="_blank" rel="noopener">Ouvir no Spotify ↗</a>
+            </li>
+            <li>
+              <img src="../assets/cover-off.jpg" alt="Capa do single OFF!" width="640" height="640" loading="lazy">
+              <p><b>OFF!</b><span>single · 13 NOV 2025 · abre o EP ANTI-RASO</span></p>
+              <a href="https://open.spotify.com/album/6Cg0ULHHKTsJo7GlEfPKrF" target="_blank" rel="noopener">Ouvir no Spotify ↗</a>
+            </li>
+            <li>
+              <img src="../assets/cover-four-rooms.jpg" alt="Capa de Four Rooms for Four Fools" width="640" height="640" loading="lazy">
+              <p><b>Four Rooms for Four Fools</b><span>EP · 2022 · o primeiro</span></p>
+              <a href="https://open.spotify.com/album/3m7dNgjIIiHDuZiNcu8Vhi" target="_blank" rel="noopener">Ouvir no Spotify ↗</a>
+            </li>
+          </ul>
+        </article>
+
+        <!-- II · A ESTRADA -->
+        <article class="leitura" data-arcano="2" aria-labelledby="leitura-2-t" hidden>
+          <h2 class="leitura__titulo" id="leitura-2-t"><span>II</span> A ESTRADA</h2>
+          <p class="leitura__oraculo">A estrada só aparece pra quem sai de casa. SAI DE CASA E COLE NOS SHOWS!!!</p>
+          <div class="proximo" id="proximo-show">
+            <p class="leitura__rotulo">próximo show</p>
+            <p class="proximo__txt">sem shows marcados — cola no Instagram pra saber primeiro</p>
+          </div>
+          <ol class="shows" id="shows-lista"></ol>
+          <figure class="flyer">
+            <img src="../assets/sympla-rock-night.jpg" alt="Flyer do Rock Night na FFFront, São Paulo, com HORNEY e Mastrobiso" width="1179" height="662" loading="lazy">
+            <figcaption>Qui, 17/09/2026, FFFront, São Paulo: HORNEY + Mastrobiso no mesmo flyer — e que flyer.</figcaption>
+          </figure>
+          <p class="leitura__nota">Não viu sua cidade? Chama a gente — <a href="https://ig.me/m/horney.band" target="_blank" rel="noopener">DM no Instagram</a>. Datas novas saem primeiro lá.</p>
+        </article>
+
+        <!-- III · A VISÃO -->
+        <article class="leitura" data-arcano="3" aria-labelledby="leitura-3-t" hidden>
+          <h2 class="leitura__titulo" id="leitura-3-t"><span>III</span> A VISÃO</h2>
+          <p class="leitura__oraculo">A visão chega por uma tela quebrada. Aperta o play: nada toca sozinho aqui.</p>
+          <div class="videos">
+            <figure class="video">
+              <div class="facade" data-yt="9uP1P11at9M" data-title="HORNEY — Fool's Game (videoclipe oficial)">
+                <button class="facade__btn" type="button" aria-label="Assistir: HORNEY — Fool's Game (videoclipe oficial)">
+                  <img src="../assets/yt-fools-game.jpg" alt="" width="1280" height="720" loading="lazy">
+                  <span class="facade__play" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7 4.5v15l13-7.5z"/></svg></span>
+                </button>
+              </div>
+              <figcaption><b>FOOL'S GAME</b> · 2022 · dir. Rique Duarte</figcaption>
+            </figure>
+            <figure class="video">
+              <div class="facade" data-yt="V9Rpgtc2vTs" data-title="HORNEY ao vivo (clipe de 38s)">
+                <button class="facade__btn" type="button" aria-label="Assistir: HORNEY ao vivo (clipe de 38s)">
+                  <img src="../assets/yt-live.jpg" alt="" width="1280" height="720" loading="lazy">
+                  <span class="facade__play" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7 4.5v15l13-7.5z"/></svg></span>
+                </button>
+              </div>
+              <figcaption><b>HORNEY AO VIVO</b> · 0:38 · 38 segundos de HORNEY ao vivo. Agora imagina inteiro, na tua frente.</figcaption>
+            </figure>
+          </div>
+          <div class="leitura__acoes">
+            <a class="botao" href="https://www.youtube.com/@bandaHorney" target="_blank" rel="noopener">canal @bandaHorney ↗</a>
+          </div>
+        </article>
+
+        <!-- IV · O BANDO -->
+        <article class="leitura" data-arcano="4" aria-labelledby="leitura-4-t" hidden>
+          <h2 class="leitura__titulo" id="leitura-4-t"><span>IV</span> O BANDO</h2>
+          <p class="leitura__oraculo">Quatro salas, quatro pessoas, um olho no meio. O bando é de Joinville e não pede licença.</p>
+          <div class="bando">
+            <img class="bando__foto" src="../assets/ig-post-2.jpg" alt="Duda Maiolini cantando no microfone, luz vermelha, guitarrista ao fundo" width="640" height="640" loading="lazy">
+            <div>
+              <p class="bando__bio">Quarteto de alt/indie rock de <strong>Joinville (SC)</strong>. Punk, hardcore e grunge no sangue, com toques de MPB — e cantando em português desde 2026. Voz e letras: <strong>Duda Maiolini</strong>. Composição com <strong>Rafa Bello</strong>. +2 que fazem o barulho todo acontecer.</p>
+              <dl class="creditos">
+                <div><dt>Duda (Eduarda) Maiolini</dt><dd>voz &amp; letras</dd></div>
+                <div><dt>Rafa Bello</dt><dd>composição</dd></div>
+                <div><dt>+ 2</dt><dd>o barulho todo</dd></div>
+                <div><dt>Dani Buarque</dt><dd>feat. em QUEBRA-CABEÇA</dd></div>
+                <div><dt>Rique Duarte</dt><dd>direção do clipe de Fool's Game (2022)</dd></div>
+              </dl>
+            </div>
+          </div>
+          <blockquote class="citacao">
+            <p>“A Horney não é uma banda que vai tocar só rock pesado, nem uma banda que vai tocar só música melancólica.”</p>
+            <footer>— Duda Maiolini, voz &amp; letras</footer>
+          </blockquote>
+          <ul class="numeros">
+            <li><b>7.3K</b><span>seguidores no IG</span></li>
+            <li><b>1.8K</b><span>ouvintes/mês no Spotify</span></li>
+            <li><b>7.8</b><span>na Unglued, pro ANTI-RASO</span></li>
+            <li><b>2022</b><span>primeiro EP: Four Rooms for Four Fools</span></li>
+          </ul>
+          <p class="leitura__nota"><strong>Rafa Bello:</strong> Escreve as músicas junto com a Duda. Se o refrão grudou na tua cabeça, a culpa é dividida.</p>
+          <img class="bando__publico" src="../assets/ig-post-5.jpg" alt="Público fazendo chifrinho e sorrindo depois do show" width="640" height="639" loading="lazy">
+        </article>
+
+        <!-- V · A OFERENDA -->
+        <article class="leitura" data-arcano="5" aria-labelledby="leitura-5-t" hidden>
+          <h2 class="leitura__titulo" id="leitura-5-t"><span>V</span> A OFERENDA</h2>
+          <p class="leitura__oraculo">A oferenda ainda está sendo costurada. O olho não vende o que não existe.</p>
+          <p class="merch__banner"><b>EM BREVE</b> — nada à venda ainda. Quer garantir o teu? Manda DM que a gente avisa primeiro.</p>
+          <ul class="merch">
+            <li class="merch__item">
+              <div class="mock mock--tee" aria-hidden="true">
+                <svg viewBox="0 0 100 100" focusable="false"><path d="M22 18 L38 10 Q50 18 62 10 L78 18 L92 38 L78 44 L78 92 L22 92 L22 44 L8 38Z" fill="#141414" stroke="#2a2a2a" stroke-width="1"/></svg>
+                <img src="../assets/cover-anti-raso.jpg" alt="" width="640" height="640" loading="lazy">
+              </div>
+              <h3>Camiseta ANTI-RASO</h3>
+              <p>Preta, com a capa do EP no peito: a porta no mar, o olho e o raio.</p>
+              <p class="merch__estado"><span>EM BREVE</span> sem preço ainda</p>
+            </li>
+            <li class="merch__item">
+              <div class="mock mock--tee mock--olho" aria-hidden="true">
+                <svg viewBox="0 0 100 100" focusable="false"><path d="M22 18 L38 10 Q50 18 62 10 L78 18 L92 38 L78 44 L78 92 L22 92 L22 44 L8 38Z" fill="#f2a900" stroke="#c98c00" stroke-width="1.4"/><path d="M38 10 Q50 18 62 10" fill="none" stroke="#c98c00" stroke-width="2"/></svg>
+                <img src="../assets/eye-tight.png" alt="" width="458" height="418" loading="lazy">
+              </div>
+              <h3>Camiseta OLHO</h3>
+              <p>Amarela HORNEY com o olho-sol do logo em preto. Pra ser visto de longe na grade.</p>
+              <p class="merch__estado"><span>EM BREVE</span> sem preço ainda</p>
+            </li>
+            <li class="merch__item">
+              <div class="mock mock--bag" aria-hidden="true">
+                <svg viewBox="0 0 100 100" focusable="false"><path d="M34 30 Q34 8 50 8 Q66 8 66 30" fill="none" stroke="#d9cdb3" stroke-width="4"/><rect x="20" y="28" width="60" height="64" fill="#ece6d8" stroke="#cfc9b8" stroke-width="1"/></svg>
+                <img src="../assets/logo-wordmark.png" alt="" width="1200" height="519" loading="lazy">
+              </div>
+              <h3>Ecobag H◎RNEY</h3>
+              <p>Algodão cru com o logo amarelo. Cabe o merch, o casaco e a água do show.</p>
+              <p class="merch__estado"><span>EM BREVE</span> sem preço ainda</p>
+            </li>
+            <li class="merch__item">
+              <div class="mock mock--adesivos" aria-hidden="true">
+                <img class="mock__a1" src="../assets/eye-sun.png" alt="" width="300" height="300" loading="lazy">
+                <img class="mock__a2" src="../assets/cover-anti-raso.jpg" alt="" width="640" height="640" loading="lazy">
+                <img class="mock__a3" src="../assets/logo-wordmark.png" alt="" width="1200" height="519" loading="lazy">
+              </div>
+              <h3>Kit de adesivos</h3>
+              <p>Olho, capa de ANTI-RASO e logo — pra colar no case, no skate, no capacete.</p>
+              <p class="merch__estado"><span>EM BREVE</span> sem preço ainda</p>
+            </li>
+          </ul>
+          <div class="leitura__acoes">
+            <a class="botao botao--amarelo" href="https://ig.me/m/horney.band" target="_blank" rel="noopener">Quero! manda DM ↗</a>
+            <a class="botao" href="https://www.instagram.com/horney.band/" target="_blank" rel="noopener">ou segue o @horney.band ↗</a>
+          </div>
+        </article>
+
+        <!-- VI · O MENSAGEIRO -->
+        <article class="leitura" data-arcano="6" aria-labelledby="leitura-6-t" hidden>
+          <h2 class="leitura__titulo" id="leitura-6-t"><span>VI</span> O MENSAGEIRO</h2>
+          <p class="leitura__oraculo">O mensageiro tem arroba. Email, o olho não encontrou em lugar nenhum: a conversa séria é na DM.</p>
+          <ul class="redes">
+            <li><a href="https://ig.me/m/horney.band" target="_blank" rel="noopener"><img src="../assets/insta.png" alt="" width="800" height="800" loading="lazy"><span><b>DM no Instagram</b><small>booking, merch, show na tua cidade</small></span></a></li>
+            <li><a href="https://www.instagram.com/horney.band/" target="_blank" rel="noopener"><img src="../assets/insta.png" alt="" width="800" height="800" loading="lazy"><span><b>@horney.band</b><small>instagram.com/horney.band · 7.3K</small></span></a></li>
+            <li><a href="https://www.tiktok.com/@horney.band" target="_blank" rel="noopener"><img src="../assets/tiktok.png" alt="" width="216" height="216" loading="lazy"><span><b>@horney.band</b><small>tiktok.com/@horney.band</small></span></a></li>
+            <li><a href="https://www.threads.com/@horney.band" target="_blank" rel="noopener"><span class="redes__glifo" aria-hidden="true">@</span><span><b>@horney.band</b><small>threads.com/@horney.band</small></span></a></li>
+            <li><a href="https://www.youtube.com/@bandaHorney" target="_blank" rel="noopener"><span class="redes__glifo" aria-hidden="true">▶</span><span><b>@bandaHorney</b><small>youtube.com/@bandaHorney</small></span></a></li>
+            <li><a href="https://open.spotify.com/artist/5zJVmieIGGEeOKbIrXmhZi" target="_blank" rel="noopener"><span class="redes__glifo" aria-hidden="true">♫</span><span><b>Artista no Spotify</b><small>1.8K ouvintes/mês</small></span></a></li>
+            <li><a href="https://ps.algohits.com/horney-anti-raso" target="_blank" rel="noopener"><span class="redes__glifo" aria-hidden="true">⚡</span><span><b>Todas as plataformas</b><small>pre-save / links</small></span></a></li>
+            <li><a href="https://www.unglued.com.br/reviews/anti-raso" target="_blank" rel="noopener"><span class="redes__glifo" aria-hidden="true">7.8</span><span><b>Unglued resenhou o ANTI-RASO</b><small>ler a review</small></span></a></li>
+          </ul>
+          <p class="leitura__nota">Você. No próximo show. Na grade. Gritando o refrão de OFF!</p>
+        </article>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- ================================ TIRAGEM ================================ -->
+  <dialog class="tiragem" id="tiragem" aria-labelledby="tiragem-titulo">
+    <div class="tiragem__barra">
+      <h2 class="tiragem__titulo" id="tiragem-titulo">TIRAGEM <span>passado · presente · futuro</span></h2>
+      <button class="mesa__btn mesa__btn--fechar" id="tiragem-fechar" type="button">fechar ✕</button>
+    </div>
+    <p class="tiragem__lead" id="tiragem-lead">O olho embaralha os seis arcanos e tira três. Não pergunta nada: ele já sabe.</p>
+    <ol class="tiragem__mesa" id="tiragem-mesa">
+      <li class="pos" data-pos="0">
+        <p class="pos__rotulo">passado</p>
+        <div class="pos__carta"><div class="flip"><div class="flip__verso"><svg viewBox="0 0 100 130" aria-hidden="true" focusable="false"><use href="#verso"/></svg></div><div class="flip__frente carta__face"><span class="carta__num"></span><svg viewBox="0 0 100 130" aria-hidden="true" focusable="false"><use href="#ilus-1"/></svg><span class="carta__nome"></span></div></div></div>
+        <div class="pos__leitura"><h3 class="pos__nome"></h3><p class="pos__texto"></p><div class="pos__cta"></div></div>
+      </li>
+      <li class="pos" data-pos="1">
+        <p class="pos__rotulo">presente</p>
+        <div class="pos__carta"><div class="flip"><div class="flip__verso"><svg viewBox="0 0 100 130" aria-hidden="true" focusable="false"><use href="#verso"/></svg></div><div class="flip__frente carta__face"><span class="carta__num"></span><svg viewBox="0 0 100 130" aria-hidden="true" focusable="false"><use href="#ilus-1"/></svg><span class="carta__nome"></span></div></div></div>
+        <div class="pos__leitura"><h3 class="pos__nome"></h3><p class="pos__texto"></p><div class="pos__cta"></div></div>
+      </li>
+      <li class="pos" data-pos="2">
+        <p class="pos__rotulo">futuro</p>
+        <div class="pos__carta"><div class="flip"><div class="flip__verso"><svg viewBox="0 0 100 130" aria-hidden="true" focusable="false"><use href="#verso"/></svg></div><div class="flip__frente carta__face"><span class="carta__num"></span><svg viewBox="0 0 100 130" aria-hidden="true" focusable="false"><use href="#ilus-1"/></svg><span class="carta__nome"></span></div></div></div>
+        <div class="pos__leitura"><h3 class="pos__nome"></h3><p class="pos__texto"></p><div class="pos__cta"></div></div>
+      </li>
+    </ol>
+    <p class="sr-only" id="tiragem-live" aria-live="polite"></p>
+    <div class="tiragem__acoes">
+      <button class="botao botao--amarelo" id="tiragem-tirar" type="button">✦ embaralhar e tirar três cartas</button>
+    </div>
+  </dialog>
+
+  <!-- ================================ SUAS CONSULTAS ================================ -->
+  <dialog class="gaveta" id="consultas" aria-labelledby="consultas-titulo">
+    <div class="gaveta__barra">
+      <h2 class="gaveta__titulo" id="consultas-titulo">suas consultas</h2>
+      <button class="mesa__btn mesa__btn--fechar" id="consultas-fechar" type="button">fechar ✕</button>
+    </div>
+    <p class="gaveta__lead">Ficam só neste navegador. O olho lembra; ninguém mais vê.</p>
+    <ol class="gaveta__lista" id="consultas-lista"></ol>
+    <p class="gaveta__vazio" id="consultas-vazio">Nenhuma consulta ainda. O olho tem memória curta pra quem não pergunta.</p>
+    <button class="botao" id="consultas-apagar" type="button">apagar minhas consultas</button>
+  </dialog>
+
+  <!-- ================================ LEITURA DA OFERENDA ================================ -->
+  <dialog class="ritual" id="ritual" aria-labelledby="ritual-titulo">
+    <div class="ritual__olho" id="ritual-olho" aria-hidden="true"></div>
+    <h2 class="sr-only" id="ritual-titulo">O olho lê a tua oferenda</h2>
+    <p class="ritual__de" id="ritual-de"></p>
+    <div class="ritual__texto" id="ritual-texto"></div>
+    <p class="ritual__resposta" id="ritual-resposta" aria-hidden="true"></p>
+    <p class="sr-only" id="ritual-live" aria-live="polite"></p>
+    <button class="botao botao--amarelo" id="ritual-fechar" type="button">voltar pro fundo ◎</button>
+  </dialog>
+
+  <div class="aviso" id="aviso" role="status" aria-live="polite"></div>
+
+  <noscript>
+    <div class="semjs">
+      <p><strong>HORNEY</strong> — quarteto de alt/indie rock de Joinville (SC). Punk, hardcore e grunge com respiros de MPB — e, desde 2026, cantando em português. Voz e letras: Duda Maiolini. Composição: Rafa Bello. +2.</p>
+      <p>Novo EP <strong>ANTI-RASO</strong> (30.07.2026): OFF! · QUEBRA-CABEÇA (feat. Dani Buarque) · MERGULHAR · ROMÂNTICA. <a href="https://open.spotify.com/album/7EM81z5ydGQq04ZbkIE5aS">OUVIR ANTI-RASO ↗</a> · <a href="https://ps.algohits.com/horney-anti-raso">Todas as plataformas ↗</a></p>
+      <p>Shows: sem shows marcados — cola no Instagram pra saber primeiro. Já rolou: 17/09 Rock Night @ FFFront (São Paulo, c/ Mastrobiso), 03/10 HORNEY ao vivo, 09/10 último show do ano.</p>
+      <p>Merch EM BREVE — <a href="https://ig.me/m/horney.band">DM no Instagram</a>. <a href="https://www.instagram.com/horney.band/">Instagram</a> · <a href="https://www.youtube.com/@bandaHorney">YouTube</a> · <a href="https://www.tiktok.com/@horney.band">TikTok</a> · <a href="https://www.threads.com/@horney.band">Threads</a></p>
+      <p>O olho precisa de JavaScript pra responder perguntas e mostrar as vozes do fundo.</p>
+    </div>
+  </noscript>
+
+  <script src="../assets/oraculo.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>

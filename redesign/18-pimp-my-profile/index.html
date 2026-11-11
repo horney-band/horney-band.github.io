@@ -1,0 +1,743 @@
+<!--
+  HORNEY — CONCEPT 18 · H◎RNEYSPACE 2.0 — PIMP MY PROFILE
+  =======================================================
+  Rationale:
+  A Duda pediu, literalmente: "juntar a ideia do desktop com a ideia do MySpace, ou colocar o conceito
+  do olho em algum lugar interativo no MySpace". O que fazia o MySpace ser MySpace era que o perfil
+  era SEU pra destruir. Então este conceito é o perfil da HORNEY onde cada módulo do MySpace (perfil,
+  player, blurbs, blog de shows, bulletins, Top 8, vídeos, fotos, merch, comments, questionário) é uma
+  janela de desktop. Ele abre como um perfil clássico de duas colunas que rola normalmente; apertar
+  "Pimp my profile" (ou arrastar qualquer barra de título) destrava o modo desktop: janelas livres,
+  arrastáveis, redimensionáveis, minimizáveis pra um dock, maximizáveis, encaixando num grid de 12
+  colunas. O editor Pimp My Profile redecora tudo (7 skins — incluindo "Horkut", o skin anti-gringo
+  pedido no feedback —, fundos gerados, rastro de cursor, headline com glitter, widgets, "meu código"
+  e link compartilhável). E o Olho é o Tom: primeiro amigo de todo mundo, slot #1 do Top 8, sempre
+  Online Now!, e conversa de verdade via HorneyIM (respostas do oráculo compartilhado). O mural de
+  comments é o mural compartilhado entre os conceitos (Horney.mural).
+
+  Techniques:
+  - Window manager sem re-parenting: no modo clássico as janelas vivem em duas colunas flex e a ordem
+    é CSS `order`; no celular as colunas viram `display: contents` (uma pilha só, reordenável com ↑↓);
+    no modo desktop viram posições absolutas em unidades de grid (coluna/largura) — nenhum nó com
+    iframe carregado é movido no DOM. Drag via pointer events + transform num rAF, resize por contorno
+    (ghost), snap ao soltar, teclado completo (setas movem, Shift+setas redimensionam).
+  - 7 skins = direções de arte completas via custom properties em <html data-skin>, aplicadas antes
+    do paint por um script inline. Fundos (estrelas, xadrez, olhos, chamas, raios, zebra, ruído de
+    xerox) e o glitter da headline são desenhados UMA vez em canvas → PNG data-URL em tile.
+  - Rastro de cursor (glitter / mini-olhos) com partículas em pool, sprites pré-renderizados, DPR ≤ 1.5,
+    rAF só enquanto há partícula viva; desligado em ponteiro grosso e em reduced motion.
+  - "Meu código": texto estilo CSS editável, parseado com whitelist (nada de CSS/HTML cru).
+  - Layout inteiro serializado em base64url no hash; barra de confirmação antes de aplicar.
+  - HorneyIM: janela de mensagens com olho SVG que segue o ponteiro e pisca; respostas de
+    Horney.oraculo.ask(); histórico local. Comments e questionário postam via Horney.mural.
+  - Player = controller da Spotify iFrame API carregado no primeiro clique (fallback em iframe).
+  - Animações infinitas pausam fora da tela (IntersectionObserver), com aba escondida e após 45s parado.
+-->
+<!doctype html>
+<html lang="pt-BR" class="no-js" data-skin="classico">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>H◎RNEYSPACE 2.0 | HORNEY's Profile — a place for fools</title>
+  <meta name="description" content="HORNEY — banda de alt/punk de Joinville (SC). Ouça o EP ANTI-RASO, veja os shows, deixe um comentário no perfil e pimpa o perfil do teu jeito.">
+  <meta name="theme-color" content="#6698cb">
+  <link rel="icon" href="../assets/eye.png">
+  <script>
+    (function () {
+      var r = document.documentElement;
+      r.className = r.className.replace('no-js', 'js');
+      try {
+        var s = JSON.parse(localStorage.getItem('horney:pimp-my-profile:state') || 'null');
+        var skins = ['classico', 'scene', 'antiraso', 'amarelo', 'luna', 'horkut', 'xerox'];
+        if (s && skins.indexOf(s.skin) > -1) r.setAttribute('data-skin', s.skin);
+        if (s && typeof s.bgc === 'string' && /^#[0-9a-f]{6}$/i.test(s.bgc)) {
+          r.style.setProperty('--wall', s.bgc);
+          r.style.setProperty('--wall-grad', 'none');
+        }
+      } catch (e) {}
+    })();
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Pirata+One&family=Special+Elite&family=VT323&display=swap">
+  <link rel="stylesheet" href="style.css">
+  <script src="../assets/oraculo.js" defer></script>
+  <script src="script.js" defer></script>
+</head>
+<body>
+  <a class="skip" href="#main">Pular para o perfil</a>
+  <a class="all-concepts" href="../index.html">← todos os conceitos</a>
+
+  <canvas class="trail" id="trail" aria-hidden="true"></canvas>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <p class="sr-only" id="sr-live" aria-live="polite"></p>
+
+  <!-- Layout recebido por link -->
+  <div class="sharebar" id="share-bar" role="region" aria-label="Layout recebido por link" hidden>
+    <p><strong>✨ chegou um layout!</strong> aplicar o layout que te mandaram?</p>
+    <div class="sharebar__btns">
+      <button class="btn btn--go" type="button" id="share-yes">aplicar</button>
+      <button class="btn" type="button" id="share-no">não, valeu</button>
+    </div>
+  </div>
+
+  <!-- Pedido de amizade do Olho (primeira visita) -->
+  <div class="friendreq" id="friendreq" role="region" aria-label="Pedido de amizade" hidden>
+    <img src="../assets/eye-sun.png" alt="" width="300" height="300">
+    <div>
+      <p class="friendreq__t"><strong>O Olho te adicionou!</strong></p>
+      <p class="friendreq__s">o primeiro amigo de todo mundo. Online Now! quer conversar?</p>
+      <p class="friendreq__btns">
+        <button class="btn btn--go" type="button" id="fr-open">abrir HorneyIM</button>
+        <button class="btn" type="button" id="fr-ok">depois</button>
+      </p>
+    </div>
+  </div>
+
+  <!-- ================= TOPO ================= -->
+  <header class="top" id="top">
+    <div class="top__inner">
+      <a class="brand" href="#top" aria-label="H◎RNEYSPACE 2.0 — início do perfil">
+        <span class="brand__name" id="brand-name">H<img src="../assets/eye-sun.png" alt="" width="300" height="300">RNEYspace</span>
+        <span class="brand__ver" aria-hidden="true">2.0</span>
+        <span class="brand__tag" id="brand-tag">a place for fools</span>
+      </a>
+      <div class="top__actions">
+        <button class="btn btn--pimp js-only" type="button" data-open-pimp>✨ Pimp my profile</button>
+        <a class="top__out" href="../index.html">sair do perfil → todos os conceitos</a>
+      </div>
+    </div>
+    <nav class="nav" aria-label="Seções do perfil">
+      <ul>
+        <li><a href="#win-perfil">Home</a></li>
+        <li><a href="#win-player">Música</a></li>
+        <li><a href="#win-blog">Shows</a></li>
+        <li><a href="#win-videos">Vídeos</a></li>
+        <li><a href="#win-fotos">Fotos</a></li>
+        <li><a href="#win-merch">Merch</a></li>
+        <li><a href="#win-top8">Amigos</a></li>
+        <li><a href="#win-comentarios">Comments</a></li>
+      </ul>
+    </nav>
+  </header>
+
+  <main id="main" class="main" tabindex="-1">
+    <noscript>
+      <div class="noscript">
+        <p><strong>HORNEY</strong> — quarteto de alt/indie rock de Joinville (SC). Punk, hardcore e grunge com respiros de MPB — e, desde 2026, cantando em português. Voz e letras: Duda Maiolini. Composição: Rafa Bello. +2.</p>
+        <p>Novo EP <strong>ANTI-RASO</strong> (30.07.2026): <a href="https://open.spotify.com/album/7EM81z5ydGQq04ZbkIE5aS">ouvir no Spotify</a> · <a href="https://ps.algohits.com/horney-anti-raso">todas as plataformas</a> · <a href="https://www.unglued.com.br/reviews/anti-raso">Unglued: 7.8/10</a></p>
+        <p>Shows: 17/09/2026 ROCK NIGHT @ FFFront (São Paulo, c/ Mastrobiso) · 03/10/2026 HORNEY AO VIVO · 09/10/2026 ÚLTIMO SHOW DO ANO — todos já rolaram. Sem shows marcados — cola no <a href="https://www.instagram.com/horney.band/">Instagram</a> pra saber primeiro.</p>
+        <p>Contato e merch (EM BREVE): <a href="https://ig.me/m/horney.band">DM no Instagram</a> · <a href="https://www.tiktok.com/@horney.band">TikTok</a> · <a href="https://www.youtube.com/@bandaHorney">YouTube</a> · <a href="https://www.threads.com/@horney.band">Threads</a></p>
+        <p>O editor Pimp My Profile, o mural, o HorneyIM e o player precisam de JavaScript.</p>
+      </div>
+    </noscript>
+
+    <div class="stage">
+      <div class="board" id="board">
+        <span class="ghost" id="ghost" aria-hidden="true"></span>
+
+        <!-- ================= COLUNA ESQUERDA ================= -->
+        <div class="col col--l" id="col-l">
+
+          <!-- HORNEY (perfil) -->
+          <section class="win" id="win-perfil" data-win="perfil" data-icon="◎" data-orkut="perfil" aria-labelledby="t-perfil">
+            <div class="win__bar"><span class="win__ico" aria-hidden="true">◎</span><h2 class="win__title" id="t-perfil">HORNEY</h2></div>
+            <div class="win__body pf">
+              <h1 class="pf__name" aria-label="HORNEY">H<img class="pf__o" src="../assets/eye-sun.png" alt="O" width="300" height="300">RNEY</h1>
+              <p class="pf__headline anim" id="headline" data-fx="liso">SAI DE CASA E COLE NOS SHOWS!!!</p>
+              <div class="pf__row">
+                <a class="pf__pic" href="../assets/ig-post-2.jpg" data-lightbox data-alt="Vocalista da HORNEY cantando ao microfone, luz vermelha">
+                  <img src="../assets/ig-post-2.jpg" alt="Vocalista da HORNEY cantando ao microfone, luz vermelha" width="640" height="640">
+                </a>
+                <div class="pf__meta">
+                  <p class="pf__quote">"ANTI-RASO significa mergulhar fundo nas coisas."</p>
+                  <p class="pf__facts">Alt / Punk / Grunge<br>(com um pé na MPB)<br>Joinville, Santa Catarina<br>BRASIL</p>
+                  <p class="online"><span class="online__dot anim" aria-hidden="true"></span>Online Now!</p>
+                  <p class="pf__login">Last Login: <time id="last-login" datetime="2026-11-10">hoje</time></p>
+                </div>
+              </div>
+              <dl class="pf__mood">
+                <div><dt>Mood:</dt><dd id="pf-mood">ANTI-RASO 😈⚡️</dd></div>
+                <div><dt>Status:</dt><dd><span id="pf-status">SAI DE CASA E COLE NOS SHOWS!!!</span> <small class="pf__sorte" id="pf-sorte-note">(sorte do dia, direto do ◎)</small></dd></div>
+              </dl>
+              <p class="pf__view">View My: <a href="#win-fotos">Pics</a> | <a href="#win-videos">Videos</a> | <a href="#win-player">Music</a></p>
+              <button class="btn btn--pimp btn--wide js-only" type="button" data-open-pimp>✨ Pimp my profile ✨</button>
+            </div>
+          </section>
+
+          <!-- Player -->
+          <section class="win player" id="win-player" data-win="player" data-icon="💿" data-orkut="músicas" aria-labelledby="t-player">
+            <div class="win__bar"><span class="win__ico" aria-hidden="true">💿</span><h2 class="win__title" id="t-player">HORNEY's Music Player</h2></div>
+            <div class="win__body">
+              <div class="player__top">
+                <img class="player__cover" src="../assets/cover-anti-raso.jpg" alt="Capa do EP ANTI-RASO: uma porta no mar, um olho gigante e raios em magenta e azul" width="640" height="640">
+                <div class="lcd">
+                  <div class="lcd__row"><span id="lcd-state">■ STOPPED</span><span id="lcd-time">00:00 / 03:19</span></div>
+                  <div class="lcd__marquee"><span class="lcd__track anim"><span id="lcd-title">HORNEY — OFF! — ANTI-RASO (EP, 2026) —&nbsp;</span><span id="lcd-title2" aria-hidden="true">HORNEY — OFF! — ANTI-RASO (EP, 2026) —&nbsp;</span></span></div>
+                  <div class="lcd__bar"><span id="lcd-bar"></span></div>
+                  <div class="eq anim" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+                </div>
+              </div>
+              <div class="player__ctl js-only">
+                <button class="pbtn" id="p-prev" type="button" aria-label="Faixa anterior">⏮</button>
+                <button class="pbtn pbtn--play" id="p-play" type="button" aria-label="Tocar">▶</button>
+                <button class="pbtn" id="p-next" type="button" aria-label="Próxima faixa">⏭</button>
+                <p class="player__note">este perfil <strong>não</strong> toca sozinho. de nada. 💿</p>
+              </div>
+              <ol class="tracks" id="tracks">
+                <li><button type="button" class="track is-current" data-i="0" aria-current="true"><span class="track__n">01</span><span class="track__t">OFF!</span><span class="track__d">3:19</span></button></li>
+                <li><button type="button" class="track" data-i="1"><span class="track__n">02</span><span class="track__t">QUEBRA-CABEÇA <small>feat. Dani Buarque</small></span><span class="track__d">4:20</span></button></li>
+                <li><button type="button" class="track" data-i="2"><span class="track__n">03</span><span class="track__t">MERGULHAR</span><span class="track__d">3:45</span></button></li>
+                <li><button type="button" class="track" data-i="3"><span class="track__n">04</span><span class="track__t">ROMÂNTICA</span><span class="track__d">2:28</span></button></li>
+              </ol>
+              <div class="player__embed" id="spotify-wrap">
+                <div id="spotify-slot"></div>
+                <p class="player__hint js-only" id="embed-hint">aperta ▶ ali em cima pra carregar o player do Spotify</p>
+              </div>
+              <h3 class="label">HORNEY's Albums</h3>
+              <ul class="albums">
+                <li><a href="https://open.spotify.com/album/7EM81z5ydGQq04ZbkIE5aS" target="_blank" rel="noopener"><img src="../assets/cover-anti-raso.jpg" alt="" width="640" height="640" loading="lazy"><span><b>ANTI-RASO</b> EP · 30 JUL 2026</span></a></li>
+                <li><a href="https://open.spotify.com/album/5jJ1py37M3i7qaZgkOOf4V" target="_blank" rel="noopener"><img src="../assets/cover-mergulhar.jpg" alt="" width="640" height="640" loading="lazy"><span><b>MERGULHAR</b> single · 2026</span></a></li>
+                <li><a href="https://open.spotify.com/album/6Cg0ULHHKTsJo7GlEfPKrF" target="_blank" rel="noopener"><img src="../assets/cover-off.jpg" alt="" width="640" height="640" loading="lazy"><span><b>OFF!</b> single · 13 NOV 2025</span></a></li>
+                <li><a href="https://open.spotify.com/album/3m7dNgjIIiHDuZiNcu8Vhi" target="_blank" rel="noopener"><img src="../assets/cover-four-rooms.jpg" alt="" width="640" height="640" loading="lazy"><span><b>Four Rooms for Four Fools</b> EP · 2022</span></a></li>
+              </ul>
+              <p class="player__links">
+                <a href="https://open.spotify.com/album/7EM81z5ydGQq04ZbkIE5aS" target="_blank" rel="noopener">Abrir ANTI-RASO no Spotify ↗</a>
+                <a href="https://ps.algohits.com/horney-anti-raso" target="_blank" rel="noopener">Todas as plataformas ↗</a>
+              </p>
+            </div>
+          </section>
+
+          <!-- Contacting -->
+          <section class="win" id="win-contato" data-win="contato" data-icon="✉" data-orkut="ações" aria-labelledby="t-contato">
+            <div class="win__bar"><span class="win__ico" aria-hidden="true">✉</span><h2 class="win__title" id="t-contato">Contacting HORNEY</h2></div>
+            <div class="win__body">
+              <ul class="contact">
+                <li><a class="contact__a" href="https://ig.me/m/horney.band" target="_blank" rel="noopener"><span aria-hidden="true">✉️</span> Send Message</a></li>
+                <li><button class="contact__a js-only" type="button" id="c-forward"><span aria-hidden="true">📨</span> Forward to Friend</button></li>
+                <li><button class="contact__a js-only" type="button" id="c-add"><span aria-hidden="true">➕</span> <span id="c-add-label">Add to Friends</span></button></li>
+                <li><a class="contact__a" href="https://open.spotify.com/artist/5zJVmieIGGEeOKbIrXmhZi" target="_blank" rel="noopener"><span aria-hidden="true">⭐</span> Add to Favorites</a></li>
+                <li><button class="contact__a js-only" type="button" id="c-im"><span aria-hidden="true">💬</span> Instant Message</button></li>
+                <li><button class="contact__a js-only" type="button" id="c-block"><span aria-hidden="true">🚫</span> Block User</button></li>
+                <li><a class="contact__a" href="https://www.tiktok.com/@horney.band" target="_blank" rel="noopener"><span aria-hidden="true">👥</span> Add to Group</a></li>
+                <li><button class="contact__a js-only" type="button" id="c-rank"><span aria-hidden="true">🏆</span> Rank User</button></li>
+              </ul>
+              <h3 class="label">HORNEY's Links</h3>
+              <ul class="links">
+                <li><a href="https://www.instagram.com/horney.band/" target="_blank" rel="noopener"><img src="../assets/insta.png" alt="" width="18" height="18" loading="lazy"> instagram.com/horney.band</a> <span class="links__stat">7.3K</span></li>
+                <li><a href="https://www.tiktok.com/@horney.band" target="_blank" rel="noopener"><img src="../assets/tiktok.png" alt="" width="18" height="18" loading="lazy"> tiktok.com/@horney.band</a></li>
+                <li><a href="https://open.spotify.com/artist/5zJVmieIGGEeOKbIrXmhZi" target="_blank" rel="noopener"><span class="links__ico" aria-hidden="true">♫</span> Spotify</a> <span class="links__stat">1.8K/mês</span></li>
+                <li><a href="https://www.youtube.com/@bandaHorney" target="_blank" rel="noopener"><span class="links__ico" aria-hidden="true">▶</span> youtube.com/@bandaHorney</a></li>
+                <li><a href="https://www.threads.com/@horney.band" target="_blank" rel="noopener"><span class="links__ico" aria-hidden="true">@</span> threads.com/@horney.band</a></li>
+                <li><a href="https://ps.algohits.com/horney-anti-raso" target="_blank" rel="noopener"><span class="links__ico" aria-hidden="true">◎</span> pre-save / links</a></li>
+              </ul>
+            </div>
+          </section>
+
+          <!-- Merch -->
+          <section class="win" id="win-merch" data-win="merch" data-icon="👕" data-orkut="lojinha (em breve)" aria-labelledby="t-merch">
+            <div class="win__bar"><span class="win__ico" aria-hidden="true">👕</span><h2 class="win__title" id="t-merch">HORNEY's Merch — EM BREVE</h2></div>
+            <div class="win__body">
+              <p class="lead">Nada de carrinho, nada de checkout. Quer garantir? Manda DM e a gente te avisa primeiro.</p>
+              <ul class="merch">
+                <li class="item">
+                  <div class="item__art item__art--tee"><img src="../assets/cover-anti-raso.jpg" alt="" width="640" height="640" loading="lazy"></div>
+                  <h3>Camiseta ANTI-RASO</h3><p>porta no mar, olho gigante, raio. preta.</p>
+                  <span class="sticker">EM BREVE</span>
+                  <a class="btn" href="https://ig.me/m/horney.band" target="_blank" rel="noopener">me avisa (DM) ↗</a>
+                </li>
+                <li class="item">
+                  <div class="item__art item__art--hoodie"><img src="../assets/cover-off.jpg" alt="" width="640" height="640" loading="lazy"></div>
+                  <h3>Moletom OFF!</h3><p>pra Joinville no inverno. e no verão também.</p>
+                  <span class="sticker">EM BREVE</span>
+                  <a class="btn" href="https://ig.me/m/horney.band" target="_blank" rel="noopener">me avisa (DM) ↗</a>
+                </li>
+                <li class="item">
+                  <div class="item__art item__art--tote"><img src="../assets/eye.png" alt="" width="1024" height="1024" loading="lazy"></div>
+                  <h3>Ecobag ◎</h3><p>o olho do O. cabe 4 EPs e um coração partido.</p>
+                  <span class="sticker">EM BREVE</span>
+                  <a class="btn" href="https://ig.me/m/horney.band" target="_blank" rel="noopener">me avisa (DM) ↗</a>
+                </li>
+                <li class="item">
+                  <div class="item__art item__art--buttons" aria-hidden="true"><span>MOOD:<br>ANTI-<br>RASO</span><span>H◎</span><span>😈</span></div>
+                  <h3>Kit de bottons</h3><p>pra mochila, pra jaqueta, pro seu Top 8 da vida real.</p>
+                  <span class="sticker">EM BREVE</span>
+                  <a class="btn" href="https://ig.me/m/horney.band" target="_blank" rel="noopener">me avisa (DM) ↗</a>
+                </li>
+              </ul>
+            </div>
+          </section>
+
+          <!-- Quiz / survey -->
+          <section class="win" id="win-quiz" data-win="quiz" data-icon="☑" data-orkut="comunidade: eu respondo questionário" aria-labelledby="t-quiz">
+            <div class="win__bar"><span class="win__ico" aria-hidden="true">☑</span><h2 class="win__title" id="t-quiz">Survey — a HORNEY responde</h2></div>
+            <div class="win__body">
+              <p class="lead">aquele questionário de corrente de 2005. respondido pela banda, só com fato. repassa!!!</p>
+              <dl class="survey">
+                <div><dt>nome</dt><dd>HORNEY (o O é um olho. sim, ele tá te olhando)</dd></div>
+                <div><dt>de onde</dt><dd>Joinville (SC), Brasil</dd></div>
+                <div><dt>formação</dt><dd>quarteto — Duda (Eduarda) Maiolini, voz &amp; letras · Rafa Bello, composição · + 2</dd></div>
+                <div><dt>som</dt><dd>punk, hardcore e grunge — com toques de MPB</dd></div>
+                <div><dt>idioma</dt><dd>português, desde 2026</dd></div>
+                <div><dt>primeiro EP</dt><dd>Four Rooms for Four Fools (2022)</dd></div>
+                <div><dt>último lançamento</dt><dd>ANTI-RASO — EP, 30/07/2026, 4 faixas</dd></div>
+                <div><dt>faixa mais curta</dt><dd>ROMÂNTICA, 2:28</dd></div>
+                <div><dt>faixa mais longa</dt><dd>QUEBRA-CABEÇA (feat. Dani Buarque), 4:20</dd></div>
+                <div><dt>o EP inteiro dura</dt><dd>13:53</dd></div>
+                <div><dt>nota da Unglued</dt><dd>7.8/10</dd></div>
+                <div><dt>primeiro clipe</dt><dd>Fool's Game (2022), dir. Rique Duarte</dd></div>
+                <div><dt>último show</dt><dd id="q-last">09/10/2026 — ÚLTIMO SHOW DO ANO</dd></div>
+                <div><dt>próximo show</dt><dd id="q-next">sem shows marcados — cola no Instagram pra saber primeiro</dd></div>
+                <div><dt>seguidores no IG</dt><dd>7.3K</dd></div>
+                <div><dt>ouvintes/mês</dt><dd>1.8K</dd></div>
+                <div><dt>uma frase</dt><dd>"ANTI-RASO significa mergulhar fundo nas coisas."</dd></div>
+                <div><dt>quem quer conhecer</dt><dd>Você. No próximo show. Na grade. Gritando o refrão de OFF!</dd></div>
+                <div><dt>primeiro amigo</dt><dd>o Olho ◎</dd></div>
+                <div><dt>slogan</dt><dd>SAI DE CASA E COLE NOS SHOWS!!!</dd></div>
+              </dl>
+              <form class="qform js-only" id="qform" novalidate>
+                <h3 class="label">agora é tua vez — responde e repassa (vai pro mural)</h3>
+                <div class="field">
+                  <label for="q-nick">teu nick</label>
+                  <input id="q-nick" maxlength="40" autocomplete="nickname" placeholder="xX_seu_nick_Xx">
+                </div>
+                <div class="field">
+                  <label for="q-faixa">faixa favorita do ANTI-RASO</label>
+                  <select id="q-faixa">
+                    <option>OFF!</option>
+                    <option>QUEBRA-CABEÇA (feat. Dani Buarque)</option>
+                    <option>MERGULHAR</option>
+                    <option>ROMÂNTICA</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="q-show">já colou num show?</label>
+                  <select id="q-show">
+                    <option>sim, na grade</option>
+                    <option>sim, lá do fundo</option>
+                    <option>ainda não, mas vou</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="q-recado">um recado de uma linha</label>
+                  <input id="q-recado" maxlength="140" placeholder="thanks for the add!!!">
+                </div>
+                <button class="btn btn--go" type="submit">responder e repassar</button>
+                <p class="status" id="q-status" role="status" aria-live="polite"></p>
+              </form>
+            </div>
+          </section>
+        </div>
+
+        <!-- ================= COLUNA DIREITA ================= -->
+        <div class="col col--r" id="col-r">
+
+          <!-- Blurbs -->
+          <section class="win" id="win-blurbs" data-win="blurbs" data-icon="📝" data-orkut="sobre mim" aria-labelledby="t-blurbs">
+            <div class="win__bar"><span class="win__ico" aria-hidden="true">📝</span><h2 class="win__title" id="t-blurbs">HORNEY's Blurbs</h2></div>
+            <div class="win__body">
+              <p class="network"><strong>HORNEY</strong> is in your extended network</p>
+              <h3 class="label">About me:</h3>
+              <p>Quarteto de alt/indie rock de <strong>Joinville (SC)</strong>. Punk, hardcore e grunge no sangue, com toques de MPB — e cantando em português desde 2026. Voz e letras: <strong>Duda Maiolini</strong>. Composição com <strong>Rafa Bello</strong>. +2 que fazem o barulho todo acontecer.</p>
+              <blockquote class="pull">
+                <p>“ANTI-RASO significa mergulhar fundo nas coisas. É se recusar a viver apenas na superfície.”</p>
+                <footer>— Duda Maiolini, voz &amp; letras</footer>
+              </blockquote>
+              <blockquote class="pull pull--alt">
+                <p>“A Horney não é uma banda que vai tocar só rock pesado, nem uma banda que vai tocar só música melancólica.”</p>
+                <footer>— Duda</footer>
+              </blockquote>
+              <h3 class="label">Who I'd like to meet:</h3>
+              <p>Você. No próximo show. Na grade. Gritando o refrão de OFF!</p>
+              <h3 class="label">HORNEY's General Info</h3>
+              <table class="kv">
+                <tbody>
+                  <tr><th scope="row">Band Members</th><td>Duda (Eduarda) Maiolini — voz &amp; letras<br>Rafa Bello — composição<br>+2</td></tr>
+                  <tr><th scope="row">Hometown</th><td>Joinville, SC, Brasil</td></tr>
+                  <tr><th scope="row">Sounds Like</th><td>punk, hardcore e grunge — com toques de MPB. Em português desde 2026.</td></tr>
+                  <tr><th scope="row">Latest Release</th><td><a href="#win-player">ANTI-RASO</a> (EP, 30/07/2026)</td></tr>
+                  <tr><th scope="row">Press</th><td><a href="https://www.unglued.com.br/reviews/anti-raso" target="_blank" rel="noopener">Unglued: 7.8/10 ↗</a></td></tr>
+                  <tr><th scope="row">First EP</th><td>Four Rooms for Four Fools (2022)</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <!-- Blog = Shows -->
+          <section class="win" id="win-blog" data-win="blog" data-icon="📅" data-orkut="eventos" aria-labelledby="t-blog">
+            <div class="win__bar"><span class="win__ico" aria-hidden="true">📅</span><h2 class="win__title" id="t-blog">HORNEY's Latest Blog Entries — SHOWS</h2></div>
+            <div class="win__body">
+              <div class="next" id="next-show">
+                <p class="next__k">próximo show</p>
+                <p class="next__v" id="next-show-v">sem shows marcados — cola no Instagram pra saber primeiro</p>
+                <p class="next__a"><a class="btn" id="next-show-a" href="https://www.instagram.com/horney.band/" target="_blank" rel="noopener">@horney.band ↗</a></p>
+              </div>
+              <ol class="blog" id="blog-list"></ol>
+              <noscript>
+                <ol class="blog">
+                  <li class="post"><p class="post__meta">09/10/2026 · já rolou</p><h3 class="post__t">ÚLTIMO SHOW DO ANO ⚡️😈</h3><p>LOCAL EM BREVE — fica de olho no insta</p></li>
+                  <li class="post"><p class="post__meta">03/10/2026 · já rolou</p><h3 class="post__t">Show — 03 de outubro</h3><p>Mais uma noite de ANTI-RASO ao vivo. Valeu quem colou 🖤</p></li>
+                  <li class="post"><p class="post__meta">17/09/2026 · já rolou</p><h3 class="post__t">ROCK NIGHT @ FFFront — São Paulo</h3><p>FFFront · Rua Purpurina, 199 — Vila Madalena, São Paulo · qui, 20h · w/ Mastrobiso</p></li>
+                </ol>
+              </noscript>
+              <p class="blog__cta">quer HORNEY na tua cidade? chama no <a href="https://ig.me/m/horney.band" target="_blank" rel="noopener">DM</a>. · <a href="https://www.instagram.com/horney.band/" target="_blank" rel="noopener">[Subscribe to this Blog]</a></p>
+            </div>
+          </section>
+
+          <!-- Bulletins -->
+          <section class="win" id="win-boletins" data-win="boletins" data-icon="📌" data-orkut="recados da comunidade" aria-labelledby="t-boletins">
+            <div class="win__bar"><span class="win__ico" aria-hidden="true">📌</span><h2 class="win__title" id="t-boletins">HORNEY's Bulletin Board</h2></div>
+            <div class="win__body">
+              <ul class="bulletins">
+                <li><details open>
+                  <summary><span class="bl__from">HORNEY</span><span class="bl__subj">ANTI-RASO — FORA AGORA</span><span class="bl__date">30/07/2026</span></summary>
+                  <div class="bl__body">
+                    <p>Novo EP, 4 faixas · 13:53: OFF!, QUEBRA-CABEÇA (feat. Dani Buarque), MERGULHAR e ROMÂNTICA.</p>
+                    <p>“ANTI-RASO significa mergulhar fundo nas coisas. É se recusar a viver apenas na superfície.” — Duda</p>
+                    <p><a href="https://open.spotify.com/album/7EM81z5ydGQq04ZbkIE5aS" target="_blank" rel="noopener">Ouvir no Spotify ↗</a> · <a href="https://ps.algohits.com/horney-anti-raso" target="_blank" rel="noopener">Todas as plataformas ↗</a></p>
+                  </div>
+                </details></li>
+                <li><details>
+                  <summary><span class="bl__from">HORNEY</span><span class="bl__subj">Unglued: 7.8/10 pro ANTI-RASO</span><span class="bl__date">fixado</span></summary>
+                  <div class="bl__body">
+                    <p>A review de ANTI-RASO na Unglued: 7.8 de 10. A gente imprimiu e colou na geladeira (mentalmente).</p>
+                    <p><a href="https://www.unglued.com.br/reviews/anti-raso" target="_blank" rel="noopener">ler a review ↗</a></p>
+                  </div>
+                </details></li>
+                <li><details>
+                  <summary><span class="bl__from">HORNEY</span><span class="bl__subj">MERCH EM BREVE</span><span class="bl__date">fixado</span></summary>
+                  <div class="bl__body">
+                    <p>Nada de carrinho, nada de checkout. Quer garantir? Manda DM e a gente te avisa primeiro.</p>
+                    <p><a href="https://ig.me/m/horney.band" target="_blank" rel="noopener">me avisa (DM) ↗</a> · <a href="#win-merch">ver a merch</a></p>
+                  </div>
+                </details></li>
+                <li><details>
+                  <summary><span class="bl__from">HORNEY</span><span class="bl__subj">MERGULHAR — single</span><span class="bl__date">2026</span></summary>
+                  <div class="bl__body">
+                    <p>single · 2026 · também está no EP ANTI-RASO.</p>
+                    <p><a href="https://open.spotify.com/album/5jJ1py37M3i7qaZgkOOf4V" target="_blank" rel="noopener">Ouvir no Spotify ↗</a></p>
+                  </div>
+                </details></li>
+                <li><details>
+                  <summary><span class="bl__from">HORNEY</span><span class="bl__subj">OFF! — single</span><span class="bl__date">13/11/2025</span></summary>
+                  <div class="bl__body">
+                    <p>single · lançado em 13 de novembro de 2025 · abre o EP ANTI-RASO.</p>
+                    <p><a href="https://open.spotify.com/album/6Cg0ULHHKTsJo7GlEfPKrF" target="_blank" rel="noopener">Ouvir no Spotify ↗</a></p>
+                  </div>
+                </details></li>
+                <li><details>
+                  <summary><span class="bl__from">HORNEY</span><span class="bl__subj">SAI DE CASA E COLE NOS SHOWS!!!</span><span class="bl__date">fixado</span></summary>
+                  <div class="bl__body">
+                    <p>Não viu sua cidade? Chama a gente — <a href="https://ig.me/m/horney.band" target="_blank" rel="noopener">DM no Instagram</a>. Datas novas saem primeiro lá.</p>
+                  </div>
+                </details></li>
+              </ul>
+            </div>
+          </section>
+
+          <!-- Top 8 -->
+          <section class="win" id="win-top8" data-win="top8" data-icon="♥" data-orkut="amigos (8)" aria-labelledby="t-top8">
+            <div class="win__bar"><span class="win__ico" aria-hidden="true">♥</span><h2 class="win__title" id="t-top8">HORNEY's Friend Space</h2></div>
+            <div class="win__body">
+              <p class="friends__count">HORNEY has <strong id="friend-count">7,300</strong> friends.</p>
+              <p class="friends__top">Top 8 <span aria-hidden="true">♥</span> <small>(clica num amigo)</small></p>
+              <ul class="top8" id="top8">
+                <li><button class="friend friend--olho" type="button" data-friend="olho"><span class="av av--olho" aria-hidden="true"><img src="../assets/eye-sun.png" alt="" width="300" height="300"></span><span class="friend__n">O Olho</span><span class="friend__on">Online Now!</span></button></li>
+                <li><button class="friend" type="button" data-friend="duda"><span class="av av--duda" aria-hidden="true"><b>🎤</b></span><span class="friend__n">Duda</span></button></li>
+                <li><button class="friend" type="button" data-friend="rafa"><span class="av av--rafa" aria-hidden="true"><b>✍️</b></span><span class="friend__n">Rafa Bello</span></button></li>
+                <li><button class="friend" type="button" data-friend="dani"><span class="av av--dani" aria-hidden="true"><b>🧩</b></span><span class="friend__n">Dani Buarque</span></button></li>
+                <li><button class="friend" type="button" data-friend="mastrobiso"><span class="av av--mastro" aria-hidden="true"><b>🎸</b></span><span class="friend__n">Mastrobiso</span></button></li>
+                <li><button class="friend" type="button" data-friend="unglued"><span class="av av--unglued" aria-hidden="true"><b>7.8</b></span><span class="friend__n">Unglued</span></button></li>
+                <li><button class="friend" type="button" data-friend="fffront"><span class="av av--fffront" aria-hidden="true"><img src="../assets/sympla-rock-night.jpg" alt="" width="1179" height="662" loading="lazy"></span><span class="friend__n">FFFront</span></button></li>
+                <li><button class="friend friend--you" type="button" data-friend="voce" id="slot-you"><span class="av av--you" aria-hidden="true"><b id="you-glyph">?</b></span><span class="friend__n" id="you-name">vaga aberta</span><span class="friend__on" id="you-tag" hidden>Você ♥</span></button></li>
+              </ul>
+              <p class="more"><a href="https://www.instagram.com/horney.band/" target="_blank" rel="noopener">View All of HORNEY's Friends ↗</a></p>
+            </div>
+          </section>
+
+          <!-- Vídeos -->
+          <section class="win" id="win-videos" data-win="videos" data-icon="▶" data-orkut="vídeos" aria-labelledby="t-videos">
+            <div class="win__bar"><span class="win__ico" aria-hidden="true">▶</span><h2 class="win__title" id="t-videos">HORNEY's Videos (2)</h2></div>
+            <div class="win__body">
+              <div class="vids">
+                <figure class="vid">
+                  <div class="facade" data-yt="9uP1P11at9M" data-title="HORNEY — Fool's Game (clipe oficial)">
+                    <a class="facade__btn" href="https://www.youtube.com/watch?v=9uP1P11at9M" target="_blank" rel="noopener" aria-label="Assistir: HORNEY — Fool's Game (clipe oficial)">
+                      <img src="../assets/yt-fools-game.jpg" alt="" width="1280" height="720" loading="lazy">
+                      <span class="facade__play" aria-hidden="true"><svg viewBox="0 0 24 24" width="28" height="28"><path d="M7 4.5v15l13-7.5z"/></svg></span>
+                    </a>
+                  </div>
+                  <figcaption><strong>Fool's Game</strong> — clipe oficial (2022), dir. Rique Duarte</figcaption>
+                </figure>
+                <figure class="vid">
+                  <div class="facade" data-yt="V9Rpgtc2vTs" data-title="HORNEY ao vivo (clipe de 38s)">
+                    <a class="facade__btn" href="https://www.youtube.com/watch?v=V9Rpgtc2vTs" target="_blank" rel="noopener" aria-label="Assistir: HORNEY ao vivo (clipe de 38s)">
+                      <img src="../assets/yt-live.jpg" alt="" width="1280" height="720" loading="lazy">
+                      <span class="facade__play" aria-hidden="true"><svg viewBox="0 0 24 24" width="28" height="28"><path d="M7 4.5v15l13-7.5z"/></svg></span>
+                    </a>
+                  </div>
+                  <figcaption><strong>HORNEY Live</strong> — 38 segundos de suor</figcaption>
+                </figure>
+              </div>
+              <p class="more"><a href="https://www.youtube.com/@bandaHorney" target="_blank" rel="noopener">mais no YouTube ↗</a></p>
+            </div>
+          </section>
+
+          <!-- Fotos -->
+          <section class="win" id="win-fotos" data-win="fotos" data-icon="📷" data-orkut="álbuns" aria-labelledby="t-fotos">
+            <div class="win__bar"><span class="win__ico" aria-hidden="true">📷</span><h2 class="win__title" id="t-fotos">HORNEY's Pics (7)</h2></div>
+            <div class="win__body">
+              <ul class="pics">
+                <li><a href="../assets/ig-post-1.jpg" data-lightbox data-alt="Pôster com a banda HORNEY dentro de um aro de chamas laranja e magenta"><img src="../assets/ig-post-1.jpg" alt="Pôster com a banda HORNEY dentro de um aro de chamas laranja e magenta" width="640" height="640" loading="lazy"></a></li>
+                <li><a href="../assets/ig-post-2.jpg" data-lightbox data-alt="Vocalista da HORNEY cantando ao microfone, luz vermelha"><img src="../assets/ig-post-2.jpg" alt="Vocalista da HORNEY cantando ao microfone, luz vermelha" width="640" height="640" loading="lazy"></a></li>
+                <li><a href="../assets/ig-post-3.jpg" data-lightbox data-alt="Frame de vídeo ao vivo em luz azul"><img src="../assets/ig-post-3.jpg" alt="Frame de vídeo ao vivo em luz azul" width="640" height="480" loading="lazy"></a></li>
+                <li><a href="../assets/ig-post-4.jpg" data-lightbox data-alt="Guitarrista de cabelo cacheado em luz vermelha com o texto “UM RECADO IMPORTANTE”"><img src="../assets/ig-post-4.jpg" alt="Guitarrista de cabelo cacheado em luz vermelha com o texto “UM RECADO IMPORTANTE”" width="640" height="640" loading="lazy"></a></li>
+                <li><a href="../assets/ig-post-5.jpg" data-lightbox data-alt="Público fazendo chifrinhos depois de um show da HORNEY"><img src="../assets/ig-post-5.jpg" alt="Público fazendo chifrinhos depois de um show da HORNEY" width="640" height="639" loading="lazy"></a></li>
+                <li><a href="../assets/ig-reel-1.jpg" data-lightbox data-alt="Frame de reel do Instagram da banda"><img src="../assets/ig-reel-1.jpg" alt="Frame de reel do Instagram da banda" width="360" height="640" loading="lazy"></a></li>
+                <li><a href="../assets/live-crowd.jpg" data-lightbox data-alt="Vocalista de costas diante de uma plateia lotada"><img src="../assets/live-crowd.jpg" alt="Vocalista de costas diante de uma plateia lotada" width="1366" height="768" loading="lazy"></a></li>
+              </ul>
+              <p class="more"><a href="https://www.instagram.com/horney.band/" target="_blank" rel="noopener">mais no Instagram ↗</a></p>
+            </div>
+          </section>
+
+          <!-- Comments -->
+          <section class="win" id="win-comentarios" data-win="comentarios" data-icon="💬" data-orkut="scraps" aria-labelledby="t-comentarios">
+            <div class="win__bar"><span class="win__ico" aria-hidden="true">💬</span><h2 class="win__title" id="t-comentarios">HORNEY's Friends Comments</h2></div>
+            <div class="win__body">
+              <p class="c-head">Displaying <strong id="c-shown">0</strong> of <strong id="c-total">0</strong> comments</p>
+              <p class="c-note">os marcados com ✦ são fãs fictícios, amor 100% real. o teu vai pro mural compartilhado da HORNEY (fica neste navegador).</p>
+              <form class="cform js-only" id="cform" novalidate>
+                <div class="field">
+                  <label for="c-name">teu nick</label>
+                  <input id="c-name" maxlength="40" autocomplete="nickname" placeholder="xX_seu_nick_Xx">
+                </div>
+                <fieldset class="glyphs" id="c-glyphs">
+                  <legend>tua pic</legend>
+                </fieldset>
+                <div class="field">
+                  <label for="c-text">Add Comment <small id="c-chars">0/500</small></label>
+                  <textarea id="c-text" maxlength="500" rows="3" placeholder="thanks for the add!!! pc4pc4"></textarea>
+                </div>
+                <div class="cform__foot">
+                  <button class="btn btn--go" type="submit" id="c-submit">Post Comment</button>
+                  <p class="status" id="c-status" role="status" aria-live="polite"></p>
+                </div>
+              </form>
+              <ol class="wall" id="wall"></ol>
+              <div class="pager js-only">
+                <button class="btn" type="button" id="c-newer">« mais novos</button>
+                <span id="c-page">página 1 de 1</span>
+                <button class="btn" type="button" id="c-older">mais antigos »</button>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+
+    <footer class="foot">
+      <p><a href="#win-perfil">Home</a> | <a href="#win-player">Música</a> | <a href="#win-blog">Shows</a> | <a href="#win-videos">Vídeos</a> | <a href="#win-merch">Merch</a> | <a href="#win-comentarios">Comments</a> | <a href="../index.html">sair do perfil → todos os conceitos</a></p>
+      <p>©2004–2026 H◎RNEYspace · uma homenagem (não oficial) à internet de antigamente · HORNEY, Joinville SC</p>
+      <p class="foot__tom">Tom continua sendo seu primeiro amigo. A HORNEY quer ser o segundo. (aqui, o primeiro é o Olho.)</p>
+    </footer>
+  </main>
+
+  <!-- ================= DOCK ================= -->
+  <nav class="dock" id="dock" aria-label="Dock de janelas" hidden>
+    <button class="dock__start" type="button" id="dock-pimp" data-open-pimp><span aria-hidden="true">◎</span> pimp</button>
+    <ul class="dock__list" id="dock-list"></ul>
+    <button class="dock__tidy" type="button" id="dock-tidy">Arrumar tudo</button>
+  </nav>
+
+  <!-- ================= HorneyIM ================= -->
+  <section class="win win--float im" id="win-im" data-win="im" data-icon="◎" aria-labelledby="t-im" hidden>
+    <div class="win__bar"><span class="win__ico" aria-hidden="true">◎</span><h2 class="win__title" id="t-im">HorneyIM — O Olho</h2></div>
+    <div class="win__body im__body">
+      <div class="im__head">
+        <div class="im__avatar" id="im-avatar"></div>
+        <div class="im__who">
+          <p class="im__name">O Olho <span aria-hidden="true">◎</span></p>
+          <p class="im__status" id="im-status"><span class="online__dot anim" aria-hidden="true"></span> Online Now!</p>
+          <p class="im__sorte" id="im-sorte"></p>
+        </div>
+      </div>
+      <ol class="im__log" id="im-log" role="log" aria-live="polite" aria-label="Conversa com o Olho"></ol>
+      <p class="im__typing" id="im-typing" hidden>O Olho está digitando<span class="dots anim" aria-hidden="true"><i>.</i><i>.</i><i>.</i></span></p>
+      <div class="im__chips" id="im-chips" role="group" aria-label="Pergunta do dia"></div>
+      <form class="im__form" id="im-form" novalidate>
+        <label class="sr-only" for="im-input">Mensagem pro Olho</label>
+        <input id="im-input" maxlength="200" autocomplete="off" placeholder="pergunta qualquer coisa…">
+        <button class="btn btn--go" type="submit" id="im-send">Enviar</button>
+      </form>
+      <p class="im__foot"><button class="linkbtn" type="button" id="im-clear">limpar conversa</button></p>
+    </div>
+  </section>
+
+  <!-- ================= Olho que te segue (widget flutuante) ================= -->
+  <section class="win win--float olho" id="win-olho" data-win="olho" data-icon="👁" aria-labelledby="t-olho" hidden>
+    <div class="win__bar"><span class="win__ico" aria-hidden="true">👁</span><h2 class="win__title" id="t-olho">olho.exe</h2></div>
+    <div class="win__body olho__body">
+      <button class="olho__btn" type="button" id="olho-btn" aria-label="O Olho que te segue — abrir HorneyIM"></button>
+    </div>
+  </section>
+
+  <!-- ================= Pimp My Profile (editor) ================= -->
+  <aside class="pimp" id="pimp" aria-labelledby="pimp-title" hidden>
+    <div class="pimp__bar">
+      <h2 id="pimp-title" tabindex="-1">✨ Pimp My Profile ✨</h2>
+      <button class="wb wb--close" type="button" id="pimp-close" aria-label="Fechar o editor">×</button>
+    </div>
+    <div class="pimp__mode">
+      <button class="btn" type="button" id="desk-toggle" aria-pressed="false">modo desktop: OFF</button>
+      <button class="btn" type="button" id="tidy">Arrumar tudo</button>
+      <p class="pimp__note" id="desk-note">arrasta qualquer barra de título pra soltar as janelas.</p>
+    </div>
+    <div class="tabs" role="tablist" aria-label="O que pimpar">
+      <button class="tab" role="tab" type="button" id="tab-skin" aria-controls="pane-skin" aria-selected="true">Skins</button>
+      <button class="tab" role="tab" type="button" id="tab-fundo" aria-controls="pane-fundo" aria-selected="false" tabindex="-1">Fundo</button>
+      <button class="tab" role="tab" type="button" id="tab-rastro" aria-controls="pane-rastro" aria-selected="false" tabindex="-1">Rastro</button>
+      <button class="tab" role="tab" type="button" id="tab-head" aria-controls="pane-head" aria-selected="false" tabindex="-1">Headline</button>
+      <button class="tab" role="tab" type="button" id="tab-widgets" aria-controls="pane-widgets" aria-selected="false" tabindex="-1">Widgets</button>
+      <button class="tab" role="tab" type="button" id="tab-codigo" aria-controls="pane-codigo" aria-selected="false" tabindex="-1">Meu código</button>
+      <button class="tab" role="tab" type="button" id="tab-share" aria-controls="pane-share" aria-selected="false" tabindex="-1">Compartilhar</button>
+    </div>
+
+    <div class="pane" role="tabpanel" id="pane-skin" aria-labelledby="tab-skin">
+      <fieldset class="opts opts--skins">
+        <legend>escolhe o skin (direção de arte inteira)</legend>
+        <label class="opt"><input type="radio" name="skin" value="classico"><span class="sw sw--classico" aria-hidden="true"></span><span class="opt__t">Clássico <small>2004</small></span></label>
+        <label class="opt"><input type="radio" name="skin" value="scene"><span class="sw sw--scene" aria-hidden="true"></span><span class="opt__t">Scene Kid <small>2006</small></span></label>
+        <label class="opt"><input type="radio" name="skin" value="antiraso"><span class="sw sw--antiraso" aria-hidden="true"></span><span class="opt__t">ANTI-RASO <small>2026</small></span></label>
+        <label class="opt"><input type="radio" name="skin" value="amarelo"><span class="sw sw--amarelo" aria-hidden="true"></span><span class="opt__t">Amarelo <small>HORNEY</small></span></label>
+        <label class="opt"><input type="radio" name="skin" value="luna"><span class="sw sw--luna" aria-hidden="true"></span><span class="opt__t">Luna XP <small>o desktop</small></span></label>
+        <label class="opt"><input type="radio" name="skin" value="horkut"><span class="sw sw--horkut" aria-hidden="true"></span><span class="opt__t">Horkut <small>anti-gringo</small></span></label>
+        <label class="opt"><input type="radio" name="skin" value="xerox"><span class="sw sw--xerox" aria-hidden="true"></span><span class="opt__t">Xerox <small>fanzine</small></span></label>
+      </fieldset>
+    </div>
+
+    <div class="pane" role="tabpanel" id="pane-fundo" aria-labelledby="tab-fundo" hidden>
+      <fieldset class="opts opts--pats">
+        <legend>padrão do fundo</legend>
+        <label class="opt"><input type="radio" name="bg" value="padrao"><span class="sw sw--pat" data-pat="padrao" aria-hidden="true"></span><span class="opt__t">do skin</span></label>
+        <label class="opt"><input type="radio" name="bg" value="liso"><span class="sw sw--pat" data-pat="liso" aria-hidden="true"></span><span class="opt__t">liso</span></label>
+        <label class="opt"><input type="radio" name="bg" value="estrelas"><span class="sw sw--pat" data-pat="estrelas" aria-hidden="true"></span><span class="opt__t">estrelas</span></label>
+        <label class="opt"><input type="radio" name="bg" value="xadrez"><span class="sw sw--pat" data-pat="xadrez" aria-hidden="true"></span><span class="opt__t">xadrez</span></label>
+        <label class="opt"><input type="radio" name="bg" value="olhos"><span class="sw sw--pat" data-pat="olhos" aria-hidden="true"></span><span class="opt__t">olhos</span></label>
+        <label class="opt"><input type="radio" name="bg" value="chamas"><span class="sw sw--pat" data-pat="chamas" aria-hidden="true"></span><span class="opt__t">chamas</span></label>
+        <label class="opt"><input type="radio" name="bg" value="raios"><span class="sw sw--pat" data-pat="raios" aria-hidden="true"></span><span class="opt__t">raios</span></label>
+        <label class="opt"><input type="radio" name="bg" value="zebra"><span class="sw sw--pat" data-pat="zebra" aria-hidden="true"></span><span class="opt__t">zebra</span></label>
+      </fieldset>
+      <div class="field field--color">
+        <label for="bg-color">cor do fundo</label>
+        <input type="color" id="bg-color" value="#e5e5e5">
+        <button class="btn" type="button" id="bg-reset">usar a cor do skin</button>
+      </div>
+      <div class="presets" role="group" aria-label="Cores rápidas">
+        <button class="preset" type="button" data-bgc="#000000" style="--c:#000000" aria-label="preto"></button>
+        <button class="preset" type="button" data-bgc="#ff2bd6" style="--c:#ff2bd6" aria-label="magenta ANTI-RASO"></button>
+        <button class="preset" type="button" data-bgc="#1b3bff" style="--c:#1b3bff" aria-label="azul ANTI-RASO"></button>
+        <button class="preset" type="button" data-bgc="#f2a900" style="--c:#f2a900" aria-label="amarelo HORNEY"></button>
+        <button class="preset" type="button" data-bgc="#6698cb" style="--c:#6698cb" aria-label="azul MySpace"></button>
+        <button class="preset" type="button" data-bgc="#ffffff" style="--c:#ffffff" aria-label="branco"></button>
+      </div>
+    </div>
+
+    <div class="pane" role="tabpanel" id="pane-rastro" aria-labelledby="tab-rastro" hidden>
+      <fieldset class="opts">
+        <legend>rastro do cursor</legend>
+        <label class="opt"><input type="radio" name="trail" value="nenhum"><span class="opt__t">nenhum (sério?)</span></label>
+        <label class="opt"><input type="radio" name="trail" value="glitter"><span class="opt__t">glitter ✨</span></label>
+        <label class="opt"><input type="radio" name="trail" value="olhos"><span class="opt__t">mini-olhos ◎</span></label>
+      </fieldset>
+      <p class="pimp__note" id="trail-note"></p>
+    </div>
+
+    <div class="pane" role="tabpanel" id="pane-head" aria-labelledby="tab-head" hidden>
+      <div class="field">
+        <label for="head-input">headline do perfil (só você vê)</label>
+        <input id="head-input" maxlength="60" autocomplete="off">
+      </div>
+      <fieldset class="opts">
+        <legend>efeito</legend>
+        <label class="opt"><input type="radio" name="fx" value="liso"><span class="opt__t">liso</span></label>
+        <label class="opt"><input type="radio" name="fx" value="glitter"><span class="opt__t fx-demo" data-fx="glitter">glitter</span></label>
+        <label class="opt"><input type="radio" name="fx" value="arco-iris"><span class="opt__t fx-demo" data-fx="arco-iris">arco-íris</span></label>
+        <label class="opt"><input type="radio" name="fx" value="fogo"><span class="opt__t fx-demo" data-fx="fogo">fogo</span></label>
+        <label class="opt"><input type="radio" name="fx" value="antiraso"><span class="opt__t fx-demo" data-fx="antiraso">ANTI-RASO</span></label>
+        <label class="opt"><input type="radio" name="fx" value="pisca"><span class="opt__t">piscando</span></label>
+      </fieldset>
+      <button class="btn" type="button" id="head-reset">voltar pro original</button>
+    </div>
+
+    <div class="pane" role="tabpanel" id="pane-widgets" aria-labelledby="tab-widgets" hidden>
+      <fieldset class="opts">
+        <legend>widgets (viram janelas no perfil)</legend>
+        <label class="opt"><input type="checkbox" name="widget" value="visitas"><span class="opt__t">contador de visitas 🔢</span></label>
+        <label class="opt"><input type="checkbox" name="widget" value="relogio"><span class="opt__t">relógio 🕒</span></label>
+        <label class="opt"><input type="checkbox" name="widget" value="humor"><span class="opt__t">humor de hoje 🌡</span></label>
+        <label class="opt"><input type="checkbox" name="widget" value="tocando"><span class="opt__t">tocando agora 🎧</span></label>
+        <label class="opt"><input type="checkbox" name="widget" value="olho"><span class="opt__t">Olho que te segue 👁</span></label>
+      </fieldset>
+    </div>
+
+    <div class="pane" role="tabpanel" id="pane-codigo" aria-labelledby="tab-codigo" hidden>
+      <label class="pimp__label" for="code">meu código (cola, edita, aplica — tipo 2006)</label>
+      <textarea class="code" id="code" rows="14" spellcheck="false" autocomplete="off"></textarea>
+      <div class="pimp__row">
+        <button class="btn btn--go" type="button" id="code-apply">aplicar código</button>
+        <button class="btn" type="button" id="code-reset">desfazer edição</button>
+      </div>
+      <ul class="code-log" id="code-log" aria-live="polite"></ul>
+    </div>
+
+    <div class="pane" role="tabpanel" id="pane-share" aria-labelledby="tab-share" hidden>
+      <p class="pimp__note">o layout inteiro (skin, fundo, ordem, posições, headline, widgets) mora no link. nada vai pra servidor nenhum. quem abrir vê uma barrinha perguntando se quer aplicar.</p>
+      <label class="pimp__label" for="share-url">teu link de layout</label>
+      <input class="share-url" id="share-url" readonly>
+      <div class="pimp__row">
+        <button class="btn btn--go" type="button" id="share-copy">Copiar link</button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ================= Diálogos ================= -->
+  <dialog class="dlg" id="friend-dlg" aria-labelledby="fd-name">
+    <form method="dialog" class="dlg__x-form"><button class="dlg__x" aria-label="Fechar">×</button></form>
+    <div class="dlg__hd">
+      <span class="av av--lg" id="fd-av" aria-hidden="true"></span>
+      <div>
+        <h2 id="fd-name">Amigo</h2>
+        <p class="dlg__role" id="fd-role"></p>
+      </div>
+    </div>
+    <p class="dlg__txt" id="fd-txt"></p>
+    <p class="dlg__actions" id="fd-actions"></p>
+  </dialog>
+
+  <dialog class="dlg" id="add-dlg" aria-labelledby="add-title">
+    <form method="dialog" class="dlg__x-form"><button class="dlg__x" aria-label="Fechar">×</button></form>
+    <h2 id="add-title">Add to Friends</h2>
+    <p class="dlg__txt" id="add-txt">HORNEY quer ser teu amigo. Teu nick vai pro slot #8 do Top 8 (fica salvo só neste navegador).</p>
+    <form id="add-form" class="addform" novalidate>
+      <div class="field">
+        <label for="add-nick">teu nick</label>
+        <input id="add-nick" maxlength="24" autocomplete="nickname" placeholder="xX_seu_nick_Xx">
+      </div>
+      <fieldset class="glyphs" id="add-glyphs">
+        <legend>tua pic</legend>
+      </fieldset>
+      <p class="dlg__actions">
+        <button class="btn btn--go" type="submit">Add to Friends</button>
+        <button class="btn" type="button" id="add-remove" hidden>desfazer amizade</button>
+      </p>
+      <p class="status" id="add-status" role="status" aria-live="polite"></p>
+    </form>
+  </dialog>
+
+  <dialog class="dlg dlg--lightbox" id="lightbox" aria-label="Foto ampliada">
+    <form method="dialog" class="dlg__x-form"><button class="dlg__x" aria-label="Fechar">×</button></form>
+    <img id="lightbox-img" src="../assets/eye.png" alt="" width="1024" height="1024">
+    <p class="dlg__cap" id="lightbox-cap"></p>
+  </dialog>
+</body>
+</html>

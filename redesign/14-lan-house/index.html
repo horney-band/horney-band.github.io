@@ -1,0 +1,1008 @@
+<!DOCTYPE html>
+<!--
+  HORNEY — CONCEITO 14 · LAN HOUSE (HorneyOS: Desktop + Horkut + MSN do Olho)
+  ===========================================================================
+  Rationale:
+  The band asked to "juntar a ideia do desktop com a ideia do MySpace", to swap MySpace for Orkut
+  ("libertar o Brasil das amarras das empresas sociais gringas") and to make the Eye an oracle with
+  real interaction. This concept fuses all three into the place where a whole generation of Brazilians
+  met Orkut, MSN and Winamp: a lan house in 2006. The site *is* Máquina 07 of "LAN HOUSE ANTI-RASO"
+  (R$ 2,00/hora). You log in with a nick, and every app on that PC is a real part of the band's site:
+  the Internet browser opens a Horkut profile (bio, sorte do dia, recados and depoimentos posted to the
+  shared fan wall), the band's 2006-style shows page, a Fotolog with the real photos + guestbook, a
+  2006 YouTube with the real clips and a MercadoLivre listing with the (EM BREVE) merch. MSN Messenger
+  holds the Eye: "O Olho (oráculo)" is a contact you chat with — answers come from Horney.oraculo,
+  its display picture follows your cursor and blinks, and you can nudge it (it nudges back). The "Fãs"
+  group chat is the shared mural as a chat room. HORNEY AMP plays the real EP through Spotify; eMula
+  "downloads" the discography straight into Spotify; Meus Documentos has the photos, LEIA-ME.txt and
+  SHOWS.txt. Brazilian internet, by the hour, with the band in every window.
+
+  Techniques:
+  - Vanilla JS window manager (script.js): pointer-event dragging clamped to the desktop, z-order,
+    minimise / maximise / close, taskbar task buttons, Esc to close, focus return to the opener,
+    open windows + positions persisted in localStorage. ≤900px: phone-like home screen; every app is a
+    full-screen sheet with a back button, home screen made inert underneath.
+  - Boot: BIOS POST → splash → lan-house client login (nick reused as author everywhere); skippable,
+    skipped on repeat visits, BIOS/splash skipped under reduced motion.
+  - Internal browser (browser.js): address bar with URL normalisation and aliases, back/forward/home/
+    reload history, favourites, hover status bar, IE-style error page; sites are <template>s cloned per
+    navigation. Fan wall boards (recados / depoimentos / fotolog guestbook) via Horney.mural with
+    channels mural / depoimento / foto, rendered only with textContent, live via subscribe().
+  - Apps (apps.js): MSN contact list, three chat windows (O Olho → Horney.oraculo.ask with typing
+    indicator, chat links, emoticons, nudge + nudge back, persisted history; HORNEY banda chat with real
+    contact links; Fãs room = mural as chat). Cursor-following, blinking SVG eye (one rAF per pointer
+    move, only while visible). HORNEY AMP = Spotify iFrame API controller loaded on first play with
+    plain-embed fallback + canvas visualizer (DPR ≤1.5) that only runs while playing. eMula download
+    list with a single rAF progress loop that ends when settled.
+  - Web Audio synthesised sounds, muted by default (one tray toggle); lan-house balloon notifications
+    (≤1 per 45s, "não perturbe" toggle, off under reduced motion); session timer with price; calendar
+    popover marking show dates; show status computed from today's date from one SHOWS array.
+  - Performance: static inline-SVG wallpaper (no filters, no blend modes), only transform/opacity
+    animations, all animations paused when the tab is hidden.
+-->
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>HORNEY · LAN HOUSE ANTI-RASO — Máquina 07</title>
+<meta name="description" content="HORNEY — alt/indie rock de Joinville (SC). Senta na Máquina 07 da lan house: Horkut, MSN com o Olho, EP ANTI-RASO no player, shows, fotos, vídeos e merch." />
+<meta name="theme-color" content="#050a3a" />
+<link rel="icon" href="../assets/eye.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=VT323&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="style.css" />
+<script>
+  (function () {
+    var d = document.documentElement;
+    d.classList.add('js');
+    try { if (localStorage.getItem('horney:lan-house:nick')) d.classList.add('is-returning'); } catch (e) {}
+  })();
+</script>
+<noscript><style>.boot,.taskbar,.icons,.postit,.phone-bar{display:none!important}.desktop{position:relative!important;height:auto!important;min-height:100vh;overflow:visible!important}</style></noscript>
+<script defer src="../assets/oraculo.js"></script>
+<script defer src="script.js"></script>
+<script defer src="browser.js"></script>
+<script defer src="apps.js"></script>
+</head>
+<body>
+<a class="skip" href="#icons">Pular pra área de trabalho</a>
+<a class="exit" href="../index.html"><span aria-hidden="true">←</span> <span class="exit__long">sair da lan house · </span>todos os conceitos</a>
+
+<!-- ===== Icon sprite ===== -->
+<svg class="sprite" aria-hidden="true" focusable="false">
+  <defs>
+    <symbol id="i-ie" viewBox="0 0 32 32"><circle cx="16" cy="17" r="11" fill="#2f6fe8"/><path d="M9.5 17.5h13.5a7 7 0 1 0-2.2 5.2" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round"/><ellipse cx="16" cy="16" rx="15" ry="6" transform="rotate(-28 16 16)" fill="none" stroke="#f2a900" stroke-width="2.2"/></symbol>
+    <symbol id="i-msn" viewBox="0 0 32 32"><circle cx="20" cy="9" r="5" fill="#2f6fe8"/><path d="M11 27c0-7 4-11 9-11s9 4 9 11z" fill="#2f6fe8"/><circle cx="12" cy="11" r="5.2" fill="#2fb34a"/><path d="M2 29c0-7 4.5-11.5 10-11.5S22 22 22 29z" fill="#2fb34a"/></symbol>
+    <symbol id="i-amp" viewBox="0 0 32 32"><rect x="2" y="3" width="28" height="26" rx="5" fill="#16182a"/><rect x="2" y="3" width="28" height="26" rx="5" fill="none" stroke="#ff2bd6" stroke-width="2"/><path d="M18.5 6 9.5 18h6l-2.5 9 10-13.5h-6z" fill="#f2a900"/></symbol>
+    <symbol id="i-emula" viewBox="0 0 32 32"><circle cx="16" cy="16" r="13.5" fill="#1d8f43"/><circle cx="16" cy="16" r="13.5" fill="none" stroke="#0d5a28" stroke-width="2"/><path d="M16 7v13m-6-5 6 6 6-6" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 24h14" stroke="#f2a900" stroke-width="3" stroke-linecap="round"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 32 32"><path d="M2 8a2 2 0 0 1 2-2h8l3 3h13a2 2 0 0 1 2 2v15a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2z" fill="#e8a800"/><path d="M2 13h28v13a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2z" fill="#ffd75e"/></symbol>
+    <symbol id="i-txt" viewBox="0 0 32 32"><path d="M6 3h15l6 6v20H6z" fill="#fff" stroke="#7b8494" stroke-width="1.6"/><path d="M21 3v6h6" fill="#dfe3ea" stroke="#7b8494" stroke-width="1.6"/><path d="M10 14h13M10 18h13M10 22h9" stroke="#2f6fe8" stroke-width="1.8"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 32 32"><path d="M8 9h16l-1.6 19H9.6z" fill="#cfd8e6" stroke="#5d6b80" stroke-width="1.6"/><path d="M6 9h20" stroke="#5d6b80" stroke-width="2.2" stroke-linecap="round"/><path d="M13 5h6" stroke="#5d6b80" stroke-width="2.2" stroke-linecap="round"/><path d="M12 6l2 7 4-4 1 6" fill="none" stroke="#ff2bd6" stroke-width="1.6"/><path d="M13 13v11M16 13v11M19 13v11" stroke="#5d6b80" stroke-width="1.2"/></symbol>
+    <symbol id="i-img" viewBox="0 0 32 32"><rect x="3" y="5" width="26" height="22" rx="2" fill="#fff" stroke="#5d6b80" stroke-width="1.6"/><path d="M5 25l8-10 6 7 3-3 5 6z" fill="#1b3bff"/><circle cx="22" cy="11" r="3" fill="#f2a900"/></symbol>
+    <symbol id="i-web" viewBox="0 0 32 32"><path d="M6 3h15l6 6v20H6z" fill="#fff" stroke="#7b8494" stroke-width="1.6"/><circle cx="16" cy="18" r="7" fill="#2f6fe8"/><path d="M9 18h14M16 11c-3 4-3 10 0 14M16 11c3 4 3 10 0 14" fill="none" stroke="#fff" stroke-width="1.2"/><path d="M3 23l6 0 0 6" fill="none" stroke="#16182a" stroke-width="2"/><path d="M3 29l6-6" stroke="#16182a" stroke-width="2"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 32 32"><circle cx="16" cy="16" r="14" fill="#f2a900"/><path d="M3 16q13-12 26 0q-13 12-26 0z" fill="#fff" stroke="#111" stroke-width="2"/><circle cx="16" cy="16" r="4.6" fill="#111"/><circle cx="17.6" cy="14.4" r="1.4" fill="#fff"/></symbol>
+    <symbol id="i-power" viewBox="0 0 32 32"><circle cx="16" cy="16" r="14" fill="#d6332c"/><path d="M16 7v9" stroke="#fff" stroke-width="3" stroke-linecap="round"/><path d="M10.5 10.5a8 8 0 1 0 11 0" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"/></symbol>
+    <symbol id="i-snd-off" viewBox="0 0 24 24"><path d="M3 9h4l5-4v14l-5-4H3z" fill="currentColor"/><path d="M16 9l5 6M21 9l-5 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="i-snd-on" viewBox="0 0 24 24"><path d="M3 9h4l5-4v14l-5-4H3z" fill="currentColor"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 17V11a6 6 0 0 1 12 0v6l2 2H4z" fill="currentColor"/><circle cx="12" cy="21" r="2" fill="currentColor"/></symbol>
+    <symbol id="i-bell-off" viewBox="0 0 24 24"><path d="M6 17V11a6 6 0 0 1 12 0v6l2 2H4z" fill="currentColor" opacity=".55"/><path d="M3 3l18 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
+  </defs>
+</svg>
+
+<!-- ===== Boot: BIOS → splash → lan house login ===== -->
+<div class="boot" id="boot" role="dialog" aria-modal="true" aria-labelledby="login-title">
+  <div class="boot__bios" id="boot-bios" aria-hidden="true">
+    <pre class="bios" id="bios-lines"></pre>
+    <p class="boot__skip">aperte qualquer tecla (ou clique) pra pular</p>
+  </div>
+  <div class="boot__splash" id="boot-splash" aria-hidden="true" hidden>
+    <img class="splash__eye" src="../assets/eye-sun.png" alt="" width="300" height="300" />
+    <p class="splash__name">Horney<b>OS</b> <span>xp</span></p>
+    <p class="splash__ed">edição lan house · 2006</p>
+    <div class="splash__track"><i id="splash-bar"></i></div>
+  </div>
+  <form class="login" id="login" hidden novalidate>
+    <div class="login__bar"><svg aria-hidden="true"><use href="#i-eye"/></svg> Cliente LAN · controle de acesso</div>
+    <div class="login__body">
+      <p class="login__kicker">bem-vindo(a) à</p>
+      <h2 class="login__title" id="login-title">LAN HOUSE ANTI-RASO</h2>
+      <p class="login__machine"><b>Máquina 07</b> · R$ 2,00/hora</p>
+      <label class="login__label" for="nick-input">Seu nick</label>
+      <input class="login__input" id="nick-input" name="nick" type="text" maxlength="40" autocomplete="nickname" autocapitalize="off" spellcheck="false" placeholder="ex.: xX_mergulhadora_Xx" />
+      <p class="login__hint">vale pra tudo nesta máquina: recados no Horkut, MSN, livro de visitas. Fica guardado só neste navegador.</p>
+      <p class="login__msg" id="login-msg" role="status" aria-live="polite"></p>
+      <div class="login__row">
+        <button type="submit" class="btn btn--go">Liberar máquina</button>
+        <button type="button" class="btn" id="login-cancel" hidden>Cancelar</button>
+      </div>
+      <ul class="login__rules">
+        <li>proibido CS no volume máximo (máquina 03, é contigo)</li>
+        <li>ouvir HORNEY no talo: liberado</li>
+      </ul>
+    </div>
+  </form>
+</div>
+
+<!-- ===== Phone status bar (≤900px) ===== -->
+<div class="phone-bar" id="phone-bar" aria-hidden="true">
+  <span class="phone-bar__m">Máq. 07</span>
+  <span class="phone-bar__u" id="phone-usage">00:00:00</span>
+  <span class="phone-bar__c" id="phone-clock">--:--</span>
+</div>
+
+<main class="desktop" id="desktop" tabindex="-1">
+  <h1 class="sr-only">HORNEY — banda de alt/indie rock de Joinville (SC). EP ANTI-RASO, 2026. Site em forma de computador de lan house.</h1>
+
+  <!-- Wallpaper: sun-eye rising behind the ANTI-RASO door in the sea; the bolt strikes the door.
+       The left third stays plain sky so the icon labels read; the wordmark sits on the sea, bottom-left. -->
+  <div class="wall" aria-hidden="true">
+    <svg class="wall__svg" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMax slice" focusable="false">
+      <defs>
+        <linearGradient id="wall-sky" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#050a3a"/>
+          <stop offset=".42" stop-color="#1b3bff"/>
+          <stop offset=".62" stop-color="#8a2be2"/>
+          <stop offset=".74" stop-color="#ff2bd6"/>
+        </linearGradient>
+        <linearGradient id="wall-sea" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#2a1a8a"/>
+          <stop offset="1" stop-color="#02031a"/>
+        </linearGradient>
+        <linearGradient id="wall-door" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#fff6c8"/>
+          <stop offset="1" stop-color="#f2a900"/>
+        </linearGradient>
+      </defs>
+      <rect width="1600" height="1000" fill="url(#wall-sky)"/>
+      <image href="../assets/eye-sun.png" x="590" y="250" width="420" height="420"/>
+      <rect y="690" width="1600" height="310" fill="url(#wall-sea)"/>
+      <g stroke="#ff2bd6" stroke-opacity=".5" stroke-width="3">
+        <path d="M0 720h1600M60 760h1480M140 810h1320M240 870h1120M380 940h840"/>
+      </g>
+      <g stroke="#9fb0ff" stroke-opacity=".35" stroke-width="2">
+        <path d="M200 740h260M1140 745h300M520 790h180M940 830h240M300 900h160M1100 905h220"/>
+      </g>
+      <g transform="translate(1150 470)">
+        <rect x="-8" y="-8" width="136" height="276" fill="#16182a"/>
+        <rect width="120" height="260" fill="url(#wall-door)"/>
+        <path d="M0 0l-70 30v260l70-30z" fill="#ff2bd6" opacity=".85"/>
+        <path d="M60 60 40 130h26l-14 70 44-90H70l14-50z" fill="#1b3bff"/>
+      </g>
+      <path d="M210 120l-50 120h40l-30 110 90-140h-44l34-90z" transform="translate(1020 80)" fill="#f2a900" opacity=".85"/>
+    </svg>
+    <img class="wall__logo" src="../assets/logo-wordmark.png" alt="" width="1200" height="519" />
+  </div>
+
+  <!-- ===== Desktop icons / phone home screen ===== -->
+  <nav class="icons" id="icons" aria-label="Área de trabalho" tabindex="-1">
+    <button class="dicon" type="button" data-open="win-ie"><svg class="dicon__img" aria-hidden="true"><use href="#i-ie"/></svg><span class="dicon__label">Internet</span></button>
+    <button class="dicon" type="button" data-url="www.horkut.com.br/horney"><span class="dicon__img dicon__img--hk" aria-hidden="true">h</span><span class="dicon__label">Horkut — HORNEY</span></button>
+    <button class="dicon" type="button" data-open="win-msn"><svg class="dicon__img" aria-hidden="true"><use href="#i-msn"/></svg><span class="dicon__label">MSN Messenger</span></button>
+    <button class="dicon" type="button" data-chat="olho"><svg class="dicon__img" aria-hidden="true"><use href="#i-eye"/></svg><span class="dicon__label">Oráculo.exe</span></button>
+    <button class="dicon" type="button" data-open="win-amp"><svg class="dicon__img" aria-hidden="true"><use href="#i-amp"/></svg><span class="dicon__label">HORNEY AMP</span></button>
+    <button class="dicon" type="button" data-open="win-emula"><svg class="dicon__img" aria-hidden="true"><use href="#i-emula"/></svg><span class="dicon__label">eMula</span></button>
+    <button class="dicon" type="button" data-open="win-docs"><svg class="dicon__img" aria-hidden="true"><use href="#i-folder"/></svg><span class="dicon__label">Meus documentos</span></button>
+    <button class="dicon" type="button" data-url="www.horney.band/shows"><svg class="dicon__img" aria-hidden="true"><use href="#i-web"/></svg><span class="dicon__label">Shows.url</span></button>
+    <button class="dicon" type="button" data-open="win-trash"><svg class="dicon__img" aria-hidden="true"><use href="#i-trash"/></svg><span class="dicon__label">Lixeira</span></button>
+  </nav>
+
+  <aside class="postit" id="postit" aria-label="Aviso da lan house">
+    <p class="postit__h">REGRAS DA LAN</p>
+    <ol>
+      <li>não come no teclado</li>
+      <li>CS no volume máximo: NÃO (máq. 03!!)</li>
+      <li>não desliga o PC, chama o atendente</li>
+      <li>HORNEY no talo: pode</li>
+    </ol>
+    <p class="postit__tip"><span class="only-desk">dica: clique duas vezes nos ícones ;)</span><span class="only-phone">dica: toca num ícone pra abrir ;)</span></p>
+  </aside>
+
+  <!-- =========================================================
+       WINDOWS
+       ========================================================= -->
+
+  <!-- ===== Internet Explorer ===== -->
+  <section class="win win--ie" id="win-ie" data-title="Internet Explorer" data-icon="ie" aria-labelledby="t-ie" tabindex="-1" hidden>
+    <header class="win__bar">
+      <button type="button" class="win__back" data-act="close" aria-label="Voltar pra tela inicial"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M8 2 4 6l4 4"/></svg><span>voltar</span></button>
+      <svg class="win__ico" aria-hidden="true"><use href="#i-ie"/></svg>
+      <h2 class="win__title" id="t-ie">Internet Explorer</h2>
+      <div class="win__ctl">
+        <button type="button" data-act="min" aria-label="Minimizar"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 9h8"/></svg></button>
+        <button type="button" data-act="max" aria-label="Maximizar"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 2.5h7v7h-7z"/></svg></button>
+        <button type="button" data-act="close" class="is-close" aria-label="Fechar"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 3l6 6M9 3l-6 6"/></svg></button>
+      </div>
+    </header>
+    <div class="win__body ie">
+      <div class="ie__tools" role="toolbar" aria-label="Navegação">
+        <button type="button" class="ie__btn ie__btn--back" id="ie-back" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11"/><path d="M13.5 7 8.5 12l5 5"/></svg><span>Voltar</span></button>
+        <button type="button" class="ie__btn" id="ie-fwd" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11"/><path d="M10.5 7l5 5-5 5"/></svg><span>Avançar</span></button>
+        <button type="button" class="ie__btn ie__btn--sm" id="ie-reload" aria-label="Atualizar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12a7 7 0 1 1-2-5M19 4v4h-4"/></svg></button>
+        <button type="button" class="ie__btn ie__btn--sm" id="ie-home" aria-label="Página inicial"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12 12 5l8 7M6.5 10v9h11v-9"/></svg></button>
+        <span class="ie__throb" id="ie-throb" aria-hidden="true"><img src="../assets/eye-sun.png" alt="" width="300" height="300" /></span>
+      </div>
+      <form class="ie__addr" id="ie-form" autocomplete="off">
+        <label for="ie-url">Endereço</label>
+        <input id="ie-url" type="text" inputmode="url" spellcheck="false" autocapitalize="off" />
+        <button type="submit" class="ie__go">Ir</button>
+      </form>
+      <nav class="ie__links" aria-label="Favoritos">
+        <span class="ie__links-h" aria-hidden="true">Links</span>
+        <button type="button" class="ie__fav" data-url="www.horkut.com.br/horney">Horkut</button>
+        <button type="button" class="ie__fav" data-url="www.horney.band/shows">Shows</button>
+        <button type="button" class="ie__fav" data-url="www.fotolog.com.br/horney">Fotolog</button>
+        <button type="button" class="ie__fav" data-url="www.youtube.com/horney">YouTube</button>
+        <button type="button" class="ie__fav" data-url="www.mercadolivre.com.br/horney-merch">MercadoLivre</button>
+      </nav>
+      <div class="ie__view" id="ie-view" role="region" aria-label="Página" tabindex="-1"></div>
+      <div class="ie__status">
+        <span class="ie__status-t" id="ie-status">Concluído</span>
+        <span class="ie__prog" aria-hidden="true"><i id="ie-prog"></i></span>
+        <span class="ie__zone"><svg aria-hidden="true"><use href="#i-ie"/></svg> Internet</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== MSN Messenger (contact list) ===== -->
+  <section class="win win--msn" id="win-msn" data-title="MSN Messenger" data-icon="msn" aria-labelledby="t-msn" tabindex="-1" hidden>
+    <header class="win__bar">
+      <button type="button" class="win__back" data-act="close" aria-label="Voltar pra tela inicial"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M8 2 4 6l4 4"/></svg><span>voltar</span></button>
+      <svg class="win__ico" aria-hidden="true"><use href="#i-msn"/></svg>
+      <h2 class="win__title" id="t-msn">MSN Messenger</h2>
+      <div class="win__ctl">
+        <button type="button" data-act="min" aria-label="Minimizar"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 9h8"/></svg></button>
+        <button type="button" data-act="close" class="is-close" aria-label="Fechar"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 3l6 6M9 3l-6 6"/></svg></button>
+      </div>
+    </header>
+    <div class="win__body msn">
+      <div class="msn__signin" id="msn-signin" aria-live="polite">
+        <svg class="msn__buddies" viewBox="0 0 32 32" aria-hidden="true"><use href="#i-msn"/></svg>
+        <p class="msn__signin-t">Entrando…</p>
+        <p class="msn__signin-n" id="msn-signin-nick"></p>
+      </div>
+      <div class="msn__main" id="msn-main" hidden>
+        <div class="msn__me">
+          <span class="msn__avatar"><img src="../assets/eye-sun.png" alt="" width="300" height="300" /></span>
+          <div class="msn__me-t">
+            <p class="msn__nick"><b class="js-nick">visitante</b> <span>(Online)</span></p>
+            <p class="msn__psm" id="msn-me-pm">♪ ouvindo: nada ainda — abre o HORNEY AMP</p>
+          </div>
+        </div>
+        <div class="msn__groups">
+          <section class="msn__group" aria-labelledby="g-banda">
+            <h3 class="msn__gh" id="g-banda">▾ Banda (1/3)</h3>
+            <ul class="msn__list">
+              <li><button type="button" class="contact" data-chat="banda"><span class="dot" aria-hidden="true"></span><span class="contact__pic contact__pic--logo" aria-hidden="true"></span><span class="contact__t"><b>HORNEY (banda)</b><small>SAI DE CASA E COLE NOS SHOWS!!! ⚡️😈</small></span></button></li>
+              <li class="contact contact--off"><span class="dot dot--off" aria-hidden="true"></span><span class="contact__pic" aria-hidden="true">🎤</span><span class="contact__t"><b>Duda Maiolini</b><small>voz &amp; letras · HORNEY (Offline)</small></span></li>
+              <li class="contact contact--off"><span class="dot dot--off" aria-hidden="true"></span><span class="contact__pic" aria-hidden="true">✍️</span><span class="contact__t"><b>Rafa Bello</b><small>composição · HORNEY (Offline)</small></span></li>
+            </ul>
+          </section>
+          <section class="msn__group" aria-labelledby="g-olho">
+            <h3 class="msn__gh" id="g-olho">▾ Oráculo (1/1)</h3>
+            <ul class="msn__list">
+              <li><button type="button" class="contact" data-chat="olho"><span class="dot" aria-hidden="true"></span><span class="contact__pic contact__pic--eye" aria-hidden="true"><svg><use href="#i-eye"/></svg></span><span class="contact__t"><b>O Olho (oráculo)</b><small>♪ ouvindo: HORNEY – MERGULHAR · pergunta. o olho responde.</small></span></button></li>
+            </ul>
+          </section>
+          <section class="msn__group" aria-labelledby="g-fas">
+            <h3 class="msn__gh" id="g-fas">▾ Fãs online (<span id="fans-count">0</span>)</h3>
+            <ul class="msn__list">
+              <li><button type="button" class="contact" data-chat="fas"><span class="dot" aria-hidden="true"></span><span class="contact__pic" aria-hidden="true">💬</span><span class="contact__t"><b>Fãs — sala do mural</b><small>todo recado do mural cai aqui. entra e fala!</small></span></button></li>
+            </ul>
+            <p class="msn__sub">deixaram recado por último:</p>
+            <ul class="msn__list msn__list--fans" id="fans-list"></ul>
+          </section>
+        </div>
+        <a class="msn__ad" href="https://open.spotify.com/album/7EM81z5ydGQq04ZbkIE5aS" target="_blank" rel="noopener"><img src="../assets/cover-anti-raso.jpg" alt="" width="640" height="640" loading="lazy" /><span><b>ANTI-RASO — já saiu!!!</b><small>Ouvir no Spotify ↗</small></span></a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Chat: O Olho ===== -->
+  <section class="win win--chat" id="win-chat-olho" data-title="O Olho — Conversa" data-icon="eye" aria-labelledby="t-chat-olho" tabindex="-1" hidden>
+    <header class="win__bar">
+      <button type="button" class="win__back" data-act="close" aria-label="Voltar"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M8 2 4 6l4 4"/></svg><span>voltar</span></button>
+      <svg class="win__ico" aria-hidden="true"><use href="#i-eye"/></svg>
+      <h2 class="win__title" id="t-chat-olho">O Olho (oráculo) — Conversa</h2>
+      <div class="win__ctl">
+        <button type="button" data-act="min" aria-label="Minimizar"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 9h8"/></svg></button>
+        <button type="button" data-act="max" aria-label="Maximizar"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 2.5h7v7h-7z"/></svg></button>
+        <button type="button" data-act="close" class="is-close" aria-label="Fechar"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 3l6 6M9 3l-6 6"/></svg></button>
+      </div>
+    </header>
+    <div class="win__body chat" data-chat-id="olho">
+      <p class="chat__to">Para: <b>O Olho (oráculo)</b> <span>· pergunta. o olho responde.</span></p>
+      <div class="chat__wrap">
+        <div class="chat__main">
+          <div class="chat__log" role="log" aria-live="polite" aria-label="Conversa com O Olho"></div>
+          <p class="chat__typing" aria-live="polite"></p>
+          <form class="chat__form">
+            <div class="chat__tools">
+              <button type="button" class="chat__tool chat__emo-btn" aria-expanded="false" aria-haspopup="true"><span aria-hidden="true">🙂</span> emoticons</button>
+              <button type="button" class="chat__tool chat__nudge"><span aria-hidden="true">📳</span> chamar atenção</button>
+              <button type="button" class="chat__tool chat__clear">apagar histórico</button>
+              <div class="chat__emo-pop" hidden></div>
+            </div>
+            <div class="chat__entry">
+              <label class="sr-only" for="chat-olho-text">Sua pergunta pro Olho</label>
+              <textarea class="chat__text" id="chat-olho-text" rows="2" maxlength="500" placeholder="pergunta qualquer coisa: shows, discos, merch, amor, futuro…"></textarea>
+              <button type="submit" class="chat__send">Enviar</button>
+            </div>
+          </form>
+        </div>
+        <aside class="chat__pics" aria-label="Fotos de exibição">
+          <figure class="dp dp--olho">
+            <svg class="eyeball" viewBox="0 0 120 120" role="img" aria-label="O Olho: um olho-sol amarelo que segue o seu cursor">
+              <circle cx="60" cy="60" r="58" fill="#f2a900"/>
+              <g fill="#111">
+                <path d="M60 4l7 18-14 0zM60 116l7-18-14 0zM4 60l18-7 0 14zM116 60l-18-7 0 14zM20 20l18 8-10 10zM100 20l-8 18-10-10zM20 100l8-18 10 10zM100 100l-18-8 10-10z"/>
+              </g>
+              <path d="M18 60q42-38 84 0q-42 38-84 0z" fill="#fff" stroke="#111" stroke-width="5"/>
+              <g class="eye__pupil">
+                <circle cx="60" cy="60" r="15" fill="#111"/>
+                <circle cx="65" cy="54" r="4.5" fill="#fff"/>
+              </g>
+              <path class="eye__lid" d="M15 60q45-44 90 0q-45 44-90 0z" fill="#f2a900" stroke="#111" stroke-width="5"/>
+            </svg>
+            <figcaption>O Olho</figcaption>
+          </figure>
+          <figure class="dp dp--me"><img src="../assets/eye-sun.png" alt="" width="300" height="300" /><figcaption class="js-nick">visitante</figcaption></figure>
+        </aside>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Chat: HORNEY (banda) ===== -->
+  <section class="win win--chat" id="win-chat-banda" data-title="HORNEY — Conversa" data-icon="msn" aria-labelledby="t-chat-banda" tabindex="-1" hidden>
+    <header class="win__bar">
+      <button type="button" class="win__back" data-act="close" aria-label="Voltar"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M8 2 4 6l4 4"/></svg><span>voltar</span></button>
+      <svg class="win__ico" aria-hidden="true"><use href="#i-msn"/></svg>
+      <h2 class="win__title" id="t-chat-banda">HORNEY (banda) — Conversa</h2>
+      <div class="win__ctl">
+        <button type="button" data-act="min" aria-label="Minimizar"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 9h8"/></svg></button>
+        <button type="button" data-act="max" aria-label="Maximizar"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 2.5h7v7h-7z"/></svg></button>
+        <button type="button" data-act="close" class="is-close" aria-label="Fechar"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 3l6 6M9 3l-6 6"/></svg></button>
+      </div>
+    </header>
+    <div class="win__body chat" data-chat-id="banda">
+      <p class="chat__to">Para: <b>HORNEY (banda)</b> <span>· fale com a banda</span></p>
+      <div class="chat__wrap">
+        <div class="chat__main">
+          <div class="chat__log" role="log" aria-live="polite" aria-label="Conversa com a HORNEY"></div>
+          <p class="chat__typing" aria-live="polite"></p>
+          <form class="chat__form">
+            <div class="chat__tools">
+              <button type="button" class="chat__tool chat__emo-btn" aria-expanded="false" aria-haspopup="true"><span aria-hidden="true">🙂</span> emoticons</button>
+              <button type="button" class="chat__tool chat__nudge"><span aria-hidden="true">📳</span> chamar atenção</button>
+              <button type="button" class="chat__tool chat__clear">apagar histórico</button>
+              <div class="chat__emo-pop" hidden></div>
+            </div>
+            <div class="chat__entry">
+              <label class="sr-only" for="chat-banda-text">Mensagem pra HORNEY</label>
+              <textarea class="chat__text" id="chat-banda-text" rows="2" maxlength="500" placeholder="manda um oi pra banda…"></textarea>
+              <button type="submit" class="chat__send">Enviar</button>
+            </div>
+          </form>
+        </div>
+        <aside class="chat__pics" aria-label="Fotos de exibição">
+          <figure class="dp dp--band"><img src="../assets/ig-post-1.jpg" alt="Pôster com a banda HORNEY dentro de um aro de chamas laranja e magenta" width="640" height="640" loading="lazy" /><figcaption>HORNEY</figcaption></figure>
+          <figure class="dp dp--me"><img src="../assets/eye-sun.png" alt="" width="300" height="300" /><figcaption class="js-nick">visitante</figcaption></figure>
+        </aside>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Chat: Fãs (mural as a chat room) ===== -->
+  <section class="win win--chat" id="win-chat-fas" data-title="Fãs — sala do mural" data-icon="msn" aria-labelledby="t-chat-fas" tabindex="-1" hidden>
+    <header class="win__bar">
+      <button type="button" class="win__back" data-act="close" aria-label="Voltar"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M8 2 4 6l4 4"/></svg><span>voltar</span></button>
+      <svg class="win__ico" aria-hidden="true"><use href="#i-msn"/></svg>
+      <h2 class="win__title" id="t-chat-fas">Fãs — sala do mural (conversa em grupo)</h2>
+      <div class="win__ctl">
+        <button type="button" data-act="min" aria-label="Minimizar"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 9h8"/></svg></button>
+        <button type="button" data-act="max" aria-label="Maximizar"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 2.5h7v7h-7z"/></svg></button>
+        <button type="button" data-act="close" class="is-close" aria-label="Fechar"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 3l6 6M9 3l-6 6"/></svg></button>
+      </div>
+    </header>
+    <div class="win__body chat" data-chat-id="fas">
+      <p class="chat__to">Sala: <b>Fãs</b> <span>· é o mural compartilhado: o que você manda aqui aparece pra todo mundo no mural da HORNEY.</span></p>
+      <div class="chat__wrap">
+        <div class="chat__main">
+          <div class="chat__log" role="log" aria-live="polite" aria-label="Sala dos fãs"></div>
+          <p class="chat__typing" aria-live="polite"></p>
+          <form class="chat__form">
+            <div class="chat__tools">
+              <button type="button" class="chat__tool chat__emo-btn" aria-expanded="false" aria-haspopup="true"><span aria-hidden="true">🙂</span> emoticons</button>
+              <div class="chat__emo-pop" hidden></div>
+            </div>
+            <div class="chat__entry">
+              <label class="sr-only" for="chat-fas-text">Mensagem pra sala dos fãs</label>
+              <textarea class="chat__text" id="chat-fas-text" rows="2" maxlength="500" placeholder="manda pro mural…"></textarea>
+              <button type="submit" class="chat__send">Enviar</button>
+            </div>
+          </form>
+        </div>
+        <aside class="chat__pics" aria-label="Fotos de exibição">
+          <figure class="dp dp--band"><img src="../assets/ig-post-5.jpg" alt="Público fazendo chifrinhos depois de um show da HORNEY" width="640" height="639" loading="lazy" /><figcaption>Fãs</figcaption></figure>
+          <figure class="dp dp--me"><img src="../assets/eye-sun.png" alt="" width="300" height="300" /><figcaption class="js-nick">visitante</figcaption></figure>
+        </aside>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== HORNEY AMP ===== -->
+  <section class="win win--amp" id="win-amp" data-title="HORNEY AMP" data-icon="amp" aria-labelledby="t-amp" tabindex="-1" hidden>
+    <header class="win__bar">
+      <button type="button" class="win__back" data-act="close" aria-label="Voltar pra tela inicial"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M8 2 4 6l4 4"/></svg><span>voltar</span></button>
+      <svg class="win__ico" aria-hidden="true"><use href="#i-amp"/></svg>
+      <h2 class="win__title" id="t-amp">HORNEY AMP</h2>
+      <div class="win__ctl">
+        <button type="button" data-act="min" aria-label="Minimizar"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 9h8"/></svg></button>
+        <button type="button" data-act="close" class="is-close" aria-label="Fechar"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 3l6 6M9 3l-6 6"/></svg></button>
+      </div>
+    </header>
+    <div class="win__body amp" id="amp">
+      <div class="amp__lcd">
+        <div class="amp__clock"><span class="amp__state" id="amp-state">■</span><span class="amp__time" id="amp-time">00:00</span></div>
+        <div class="amp__info">
+          <div class="amp__marquee" id="amp-marquee" aria-hidden="true"><div class="amp__mq"><span></span><span></span></div></div>
+          <p class="amp__kbps"><span>320</span> kbps <span>44</span> kHz <b id="amp-stereo">stereo</b></p>
+        </div>
+        <canvas class="amp__viz" id="amp-viz" width="152" height="40" aria-hidden="true"></canvas>
+      </div>
+      <p class="sr-only" id="amp-now" aria-live="polite"></p>
+      <input class="amp__seek" id="amp-seek" type="range" min="0" max="1000" value="0" disabled aria-label="Posição na faixa" />
+      <div class="amp__btns" role="group" aria-label="Controles">
+        <button type="button" id="amp-prev" aria-label="Faixa anterior"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h2v14H6zM20 5v14L9 12z"/></svg></button>
+        <button type="button" id="amp-play" aria-label="Tocar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5v15l12.5-7.5z"/></svg></button>
+        <button type="button" id="amp-pause" aria-label="Pausar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg></button>
+        <button type="button" id="amp-stop" aria-label="Parar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6h12v12H6z"/></svg></button>
+        <button type="button" id="amp-next" aria-label="Próxima faixa"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 5h2v14h-2zM4 5v14l11-7z"/></svg></button>
+        <span class="amp__brand" aria-hidden="true">H◎RNEY</span>
+      </div>
+      <div class="amp__pl">
+        <p class="amp__pl-h">PLAYLIST · ANTI-RASO (2026) · 4 faixas · 13:53</p>
+        <ol class="amp__tracks">
+          <li><button type="button" class="amp-track" data-track="0"><span>1. HORNEY - OFF!</span><span>3:19</span></button></li>
+          <li><button type="button" class="amp-track" data-track="1"><span>2. HORNEY - QUEBRA-CABEÇA (feat. Dani Buarque)</span><span>4:20</span></button></li>
+          <li><button type="button" class="amp-track" data-track="2"><span>3. HORNEY - MERGULHAR</span><span>3:44</span></button></li>
+          <li><button type="button" class="amp-track" data-track="3"><span>4. HORNEY - ROMÂNTICA</span><span>2:28</span></button></li>
+        </ol>
+      </div>
+      <div class="amp__sp">
+        <p class="amp__note" id="sp-note">o plug-in do Spotify só carrega quando você aperta ▶ (este PC não toca sozinho).</p>
+        <div class="amp__spwrap" id="sp-wrap"><div id="sp-slot"></div></div>
+        <p class="amp__links"><a href="https://open.spotify.com/album/7EM81z5ydGQq04ZbkIE5aS" target="_blank" rel="noopener">EP no Spotify ↗</a> · <a href="https://ps.algohits.com/horney-anti-raso" target="_blank" rel="noopener">Todas as plataformas ↗</a></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== eMula ===== -->
+  <section class="win win--emula" id="win-emula" data-title="eMula" data-icon="emula" aria-labelledby="t-emula" tabindex="-1" hidden>
+    <header class="win__bar">
+      <button type="button" class="win__back" data-act="close" aria-label="Voltar pra tela inicial"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M8 2 4 6l4 4"/></svg><span>voltar</span></button>
+      <svg class="win__ico" aria-hidden="true"><use href="#i-emula"/></svg>
+      <h2 class="win__title" id="t-emula">eMula v0.47c — Transferências</h2>
+      <div class="win__ctl">
+        <button type="button" data-act="min" aria-label="Minimizar"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 9h8"/></svg></button>
+        <button type="button" data-act="max" aria-label="Maximizar"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 2.5h7v7h-7z"/></svg></button>
+        <button type="button" data-act="close" class="is-close" aria-label="Fechar"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 3l6 6M9 3l-6 6"/></svg></button>
+      </div>
+    </header>
+    <div class="win__body em">
+      <div class="em__top">
+        <svg class="em__logo" aria-hidden="true"><use href="#i-emula"/></svg>
+        <div>
+          <p class="em__h">Transferências</p>
+          <p class="em__server">conectado ao servidor <b>LAN HOUSE ANTI-RASO</b> · ID alta · rede: a da lan (lenta)</p>
+        </div>
+      </div>
+      <p class="em__honest">aqui ninguém pirateia ninguém: todo download da HORNEY termina no Spotify. ⚡</p>
+      <div class="em__head" aria-hidden="true"><span>Nome do arquivo</span><span>Tamanho</span><span>Progresso</span><span>Status</span><span></span></div>
+      <ul class="em__list" id="em-list"></ul>
+      <p class="em__status" id="em-status" role="status" aria-live="polite">8 arquivo(s) na fila · 0 baixando</p>
+    </div>
+  </section>
+
+  <!-- ===== Meus documentos ===== -->
+  <section class="win win--docs" id="win-docs" data-title="Meus documentos" data-icon="folder" aria-labelledby="t-docs" tabindex="-1" hidden>
+    <header class="win__bar">
+      <button type="button" class="win__back" data-act="close" aria-label="Voltar pra tela inicial"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M8 2 4 6l4 4"/></svg><span>voltar</span></button>
+      <svg class="win__ico" aria-hidden="true"><use href="#i-folder"/></svg>
+      <h2 class="win__title" id="t-docs">Meus documentos</h2>
+      <div class="win__ctl">
+        <button type="button" data-act="min" aria-label="Minimizar"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 9h8"/></svg></button>
+        <button type="button" data-act="max" aria-label="Maximizar"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 2.5h7v7h-7z"/></svg></button>
+        <button type="button" data-act="close" class="is-close" aria-label="Fechar"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 3l6 6M9 3l-6 6"/></svg></button>
+      </div>
+    </header>
+    <div class="win__body ex">
+      <div class="ex__addr">
+        <button type="button" class="ex__up" id="ex-up" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V6M6 11l6-6 6 6"/></svg> Acima</button>
+        <p class="ex__path"><span class="sr-only">Endereço: </span>C:\Documents and Settings\<span class="js-nick">visitante</span>\Meus documentos<span id="ex-path"></span></p>
+      </div>
+      <div class="ex__wrap">
+        <aside class="ex__side">
+          <p class="ex__sh">Outros locais</p>
+          <ul>
+            <li><button type="button" class="lnk" data-open="win-trash">Lixeira</button></li>
+            <li><button type="button" class="lnk" data-open="win-emula">eMula (downloads)</button></li>
+            <li><button type="button" class="lnk" data-url="www.fotolog.com.br/horney">fotolog da HORNEY</button></li>
+          </ul>
+        </aside>
+        <div class="ex__view" id="ex-view"></div>
+      </div>
+      <p class="ex__status" id="ex-status" role="status" aria-live="polite">4 objeto(s)</p>
+    </div>
+  </section>
+
+  <!-- ===== Visualizador de imagens ===== -->
+  <section class="win win--img" id="win-img" data-title="Visualizador de imagens" data-icon="img" aria-labelledby="t-img" tabindex="-1" hidden>
+    <header class="win__bar">
+      <button type="button" class="win__back" data-act="close" aria-label="Voltar"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M8 2 4 6l4 4"/></svg><span>voltar</span></button>
+      <svg class="win__ico" aria-hidden="true"><use href="#i-img"/></svg>
+      <h2 class="win__title" id="t-img">Visualizador de imagens e fax do Windows</h2>
+      <div class="win__ctl">
+        <button type="button" data-act="min" aria-label="Minimizar"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 9h8"/></svg></button>
+        <button type="button" data-act="max" aria-label="Maximizar"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 2.5h7v7h-7z"/></svg></button>
+        <button type="button" data-act="close" class="is-close" aria-label="Fechar"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 3l6 6M9 3l-6 6"/></svg></button>
+      </div>
+    </header>
+    <div class="win__body viewer">
+      <figure class="viewer__fig">
+        <img id="img-view" src="../assets/ig-post-1.jpg" alt="Pôster com a banda HORNEY dentro de um aro de chamas laranja e magenta" width="640" height="640" loading="lazy" />
+        <figcaption id="img-cap">Pôster com a banda HORNEY dentro de um aro de chamas laranja e magenta</figcaption>
+      </figure>
+      <div class="viewer__bar">
+        <button type="button" class="btn" id="img-prev"><span aria-hidden="true">◀</span> Anterior</button>
+        <span id="img-count" aria-live="polite">1 de 8</span>
+        <button type="button" class="btn" id="img-next">Próxima <span aria-hidden="true">▶</span></button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Bloco de notas ===== -->
+  <section class="win win--np" id="win-notepad" data-title="Bloco de notas" data-icon="txt" aria-labelledby="t-notepad" tabindex="-1" hidden>
+    <header class="win__bar">
+      <button type="button" class="win__back" data-act="close" aria-label="Voltar"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M8 2 4 6l4 4"/></svg><span>voltar</span></button>
+      <svg class="win__ico" aria-hidden="true"><use href="#i-txt"/></svg>
+      <h2 class="win__title" id="t-notepad">LEIA-ME.txt — Bloco de notas</h2>
+      <div class="win__ctl">
+        <button type="button" data-act="min" aria-label="Minimizar"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 9h8"/></svg></button>
+        <button type="button" data-act="max" aria-label="Maximizar"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 2.5h7v7h-7z"/></svg></button>
+        <button type="button" data-act="close" class="is-close" aria-label="Fechar"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 3l6 6M9 3l-6 6"/></svg></button>
+      </div>
+    </header>
+    <div class="win__body np">
+      <div class="np__doc" id="np-text" tabindex="0" role="document" aria-label="Conteúdo do arquivo"></div>
+      <p class="np__status" id="np-status">Ln 1, Col 1</p>
+    </div>
+  </section>
+
+  <!-- ===== Lixeira ===== -->
+  <section class="win win--trash" id="win-trash" data-title="Lixeira" data-icon="trash" aria-labelledby="t-trash" tabindex="-1" hidden>
+    <header class="win__bar">
+      <button type="button" class="win__back" data-act="close" aria-label="Voltar pra tela inicial"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M8 2 4 6l4 4"/></svg><span>voltar</span></button>
+      <svg class="win__ico" aria-hidden="true"><use href="#i-trash"/></svg>
+      <h2 class="win__title" id="t-trash">Lixeira</h2>
+      <div class="win__ctl">
+        <button type="button" data-act="min" aria-label="Minimizar"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 9h8"/></svg></button>
+        <button type="button" data-act="close" class="is-close" aria-label="Fechar"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 3l6 6M9 3l-6 6"/></svg></button>
+      </div>
+    </header>
+    <div class="win__body trash">
+      <ul class="trash__list">
+        <li class="trash__item">
+          <svg class="trash__ico" aria-hidden="true"><use href="#i-amp"/></svg>
+          <div class="trash__t"><b>musica_rasa.mp3</b><small>excluído de: C:\Meus documentos\Minhas músicas</small></div>
+          <button type="button" class="btn" data-trash="0">Restaurar</button>
+        </li>
+        <li class="trash__item">
+          <svg class="trash__ico" aria-hidden="true"><use href="#i-txt"/></svg>
+          <div class="trash__t"><b>scrap_que_eu_nao_mandei.txt</b><small>excluído de: C:\Área de trabalho</small></div>
+          <button type="button" class="btn" data-trash="1">Restaurar</button>
+        </li>
+      </ul>
+      <div class="trash__foot">
+        <button type="button" class="btn" id="trash-empty">Esvaziar Lixeira</button>
+        <p class="trash__status" id="trash-status" role="status" aria-live="polite">2 objeto(s)</p>
+      </div>
+    </div>
+  </section>
+
+  <noscript>
+    <article class="nojs">
+      <h2>HORNEY — LEIA-ME (sem JavaScript)</h2>
+      <p>Quarteto de alt/indie rock de <strong>Joinville (SC)</strong>. Punk, hardcore e grunge com respiros de MPB — e, desde 2026, cantando em português. Voz e letras: Duda Maiolini. Composição com Rafa Bello. +2.</p>
+      <p><strong>ANTI-RASO</strong> — EP, 30.07.2026, 4 faixas: OFF! · QUEBRA-CABEÇA (feat. Dani Buarque) · MERGULHAR · ROMÂNTICA. 7.8/10 na Unglued. <a href="https://open.spotify.com/album/7EM81z5ydGQq04ZbkIE5aS">Ouvir no Spotify ↗</a> · <a href="https://ps.algohits.com/horney-anti-raso">Todas as plataformas ↗</a></p>
+      <p>Também: MERGULHAR (single, 2026) · OFF! (single, 13.11.2025) · Four Rooms for Four Fools (EP, 2022).</p>
+      <p>Shows 2026: 17/09 ROCK NIGHT @ FFFront, São Paulo (c/ Mastrobiso) · 03/10 HORNEY AO VIVO · 09/10 ÚLTIMO SHOW DO ANO. Datas novas saem primeiro no <a href="https://www.instagram.com/horney.band/">Instagram</a>.</p>
+      <p>Merch EM BREVE — <a href="https://ig.me/m/horney.band">DM no Instagram</a>.</p>
+      <p><a href="https://www.instagram.com/horney.band/">Instagram</a> · <a href="https://www.tiktok.com/@horney.band">TikTok</a> · <a href="https://www.threads.com/@horney.band">Threads</a> · <a href="https://www.youtube.com/@bandaHorney">YouTube</a> · <a href="https://open.spotify.com/artist/5zJVmieIGGEeOKbIrXmhZi">Spotify</a></p>
+      <p>A máquina 07 precisa de JavaScript pra ligar. <a href="../index.html">← todos os conceitos</a></p>
+    </article>
+  </noscript>
+</main>
+
+<!-- ===== Start menu ===== -->
+<div class="start-menu" id="start-menu" hidden>
+  <div class="sm__head"><img src="../assets/eye-sun.png" alt="" width="300" height="300" /><p><b class="js-nick">visitante</b><small>Máquina 07 · LAN HOUSE ANTI-RASO</small></p></div>
+  <div class="sm__cols">
+    <ul class="sm__l">
+      <li><button type="button" data-open="win-ie"><svg aria-hidden="true"><use href="#i-ie"/></svg><span>Internet<small>Internet Explorer</small></span></button></li>
+      <li><button type="button" data-open="win-msn"><svg aria-hidden="true"><use href="#i-msn"/></svg><span>MSN Messenger<small>O Olho tá online</small></span></button></li>
+      <li><button type="button" data-chat="olho"><svg aria-hidden="true"><use href="#i-eye"/></svg><span>Oráculo.exe<small>pergunta pro Olho</small></span></button></li>
+      <li><button type="button" data-open="win-amp"><svg aria-hidden="true"><use href="#i-amp"/></svg><span>HORNEY AMP<small>tocar ANTI-RASO</small></span></button></li>
+      <li><button type="button" data-open="win-emula"><svg aria-hidden="true"><use href="#i-emula"/></svg><span>eMula</span></button></li>
+    </ul>
+    <ul class="sm__r">
+      <li><button type="button" data-open="win-docs">Meus documentos</button></li>
+      <li><button type="button" data-url="www.horkut.com.br/horney">Horkut — HORNEY</button></li>
+      <li><button type="button" data-url="www.horney.band/shows">Shows</button></li>
+      <li><button type="button" data-doc="leiame">LEIA-ME.txt</button></li>
+      <li><button type="button" data-open="win-trash">Lixeira</button></li>
+      <li><button type="button" id="relogin-btn">Trocar nick…</button></li>
+    </ul>
+  </div>
+  <div class="sm__foot">
+    <a class="sm__exit" href="../index.html">sair da lan house → todos os conceitos</a>
+    <button type="button" class="sm__off" id="shutdown-btn"><svg aria-hidden="true"><use href="#i-power"/></svg> Desligar</button>
+  </div>
+</div>
+
+<!-- ===== Calendar popover ===== -->
+<div class="cal" id="cal" hidden>
+  <div class="cal__head">
+    <button type="button" id="cal-prev" aria-label="Mês anterior">‹</button>
+    <p id="cal-title" aria-live="polite">novembro de 2026</p>
+    <button type="button" id="cal-next" aria-label="Próximo mês">›</button>
+  </div>
+  <div class="cal__grid" id="cal-grid"></div>
+  <p class="cal__legend"><i></i> show marcado <i class="is-past"></i> já rolou</p>
+  <p class="cal__next" id="cal-next-show"></p>
+  <ul class="cal__shows" id="cal-shows" aria-label="Shows da HORNEY"></ul>
+</div>
+
+<!-- ===== Balloon ===== -->
+<div class="balloon" id="balloon" hidden>
+  <button type="button" class="balloon__x" id="balloon-x" aria-label="Fechar aviso">×</button>
+  <p class="balloon__title" id="balloon-title"></p>
+  <p class="balloon__text" id="balloon-text"></p>
+</div>
+<p class="sr-only" id="announcer" role="status" aria-live="polite"></p>
+
+<!-- ===== Taskbar ===== -->
+<nav class="taskbar" id="taskbar" aria-label="Barra de tarefas">
+  <button type="button" class="start" id="start-btn" aria-expanded="false" aria-controls="start-menu"><img src="../assets/eye-sun.png" alt="" width="300" height="300" />iniciar</button>
+  <div class="tasks" id="tasks" role="group" aria-label="Janelas abertas"></div>
+  <div class="tray">
+    <button type="button" class="tray__btn" id="tray-msn" data-open="win-msn" aria-label="MSN Messenger"><svg aria-hidden="true"><use href="#i-msn"/></svg></button>
+    <button type="button" class="tray__btn" id="snd-btn" aria-pressed="false" aria-label="Som"><svg aria-hidden="true"><use href="#i-snd-off"/></svg></button>
+    <button type="button" class="tray__btn" id="dnd-btn" aria-pressed="false" aria-label="Não perturbe"><svg aria-hidden="true"><use href="#i-bell"/></svg></button>
+    <span class="usage" id="usage">tempo de uso 00:00:00 · R$ 0,00</span>
+    <button type="button" class="clock" id="clock" aria-expanded="false" aria-controls="cal">--:--</button>
+  </div>
+</nav>
+
+<!-- ===== Shutdown ===== -->
+<div class="shutdown" id="shutdown" role="dialog" aria-modal="true" aria-labelledby="shutdown-title" hidden>
+  <div class="shutdown__box">
+    <p class="shutdown__big" id="shutdown-title">Agora é seguro desligar o computador.</p>
+    <p class="shutdown__sub">…e sair de casa pra colar no show. ⚡😈</p>
+    <p class="shutdown__att">— atendente: “máquina 07 liberada. volta sempre.”</p>
+    <div class="shutdown__row">
+      <button type="button" class="btn btn--go" id="reboot-btn">Ligar de novo</button>
+      <a class="btn" href="../index.html">sair da lan house → todos os conceitos</a>
+    </div>
+  </div>
+</div>
+
+<!-- =========================================================
+     INTERNAL SITES (cloned into the browser per navigation)
+     ========================================================= -->
+
+<!-- www.horkut.com.br/horney -->
+<template id="tpl-horkut">
+  <div class="hk">
+    <header class="hk__top">
+      <span class="hk__logo">horkut<sup>beta</sup></span>
+      <nav class="hk__nav" aria-label="Horkut">
+        <button type="button" class="hk__navb" data-jump="hk-perfil">perfil</button>
+        <button type="button" class="hk__navb" data-jump="hk-recados">recados</button>
+        <button type="button" class="hk__navb" data-jump="hk-depo">depoimentos</button>
+        <button type="button" class="hk__navb" data-jump="hk-comus">comunidades</button>
+      </nav>
+      <p class="hk__me">logado como <b class="js-nick">visitante</b></p>
+    </header>
+    <p class="hk__free">horkut: a rede social que é nossa. sem algoritmo gringo, sem anúncio, sem feed infinito. só recado.</p>
+    <div class="hk__grid">
+      <aside class="hk__left">
+        <img class="hk__pic" src="../assets/ig-post-2.jpg" alt="Vocalista da HORNEY cantando ao microfone, luz vermelha" width="640" height="640" />
+        <p class="hk__name">HORNEY</p>
+        <p class="hk__where">Joinville, SC, Brasil</p>
+        <ul class="hk__menu">
+          <li><button type="button" class="lnk" data-jump="hk-recados">recados (<span class="js-count-mural">…</span>)</button></li>
+          <li><button type="button" class="lnk" data-url="www.fotolog.com.br/horney">fotos (8)</button></li>
+          <li><button type="button" class="lnk" data-url="www.youtube.com/horney">vídeos (2)</button></li>
+          <li><button type="button" class="lnk" data-jump="hk-depo">depoimentos (<span class="js-count-depoimento">…</span>)</button></li>
+          <li><button type="button" class="lnk" data-url="www.horney.band/shows">shows</button></li>
+          <li><button type="button" class="lnk" data-url="www.mercadolivre.com.br/horney-merch">merch</button></li>
+        </ul>
+      </aside>
+      <div class="hk__main">
+        <section class="hk-box" id="hk-perfil" aria-labelledby="hk-perfil-h">
+          <h3 class="hk__h1" id="hk-perfil-h">HORNEY</h3>
+          <p class="hk__sorte"><b>sorte do dia:</b> <span class="js-sorte">…</span></p>
+          <p class="hk__status">SAI DE CASA E COLE NOS SHOWS!!! ⚡️😈</p>
+          <dl class="hk__facts">
+            <dt>quem sou eu</dt>
+            <dd>Quarteto de alt/indie rock de <b>Joinville (SC)</b>. Punk, hardcore e grunge no sangue, com toques de MPB — e cantando em português desde 2026. Voz e letras: <b>Duda Maiolini</b>. Composição com <b>Rafa Bello</b>. +2 que fazem o barulho todo acontecer.</dd>
+            <dt>cidade natal</dt><dd>Joinville, SC, Brasil</dd>
+            <dt>estilo</dt><dd>Alt / Punk / Grunge (com um pé na MPB)</dd>
+            <dt>idioma</dt><dd>português, desde 2026</dd>
+            <dt>formação</dt><dd>Duda (Eduarda) Maiolini — voz &amp; letras · Rafa Bello — composição · +2</dd>
+            <dt>último lançamento</dt><dd>ANTI-RASO · EP · 30/07/2026 · 4 faixas · 7.8/10 na Unglued</dd>
+            <dt>primeiro EP</dt><dd>Four Rooms for Four Fools (2022)</dd>
+            <dt>números</dt><dd>7.3K seguidores no IG · 1.8K ouvintes/mês</dd>
+            <dt>quem eu gostaria de conhecer</dt><dd>Você. No próximo show. Na grade. Gritando o refrão de OFF!</dd>
+          </dl>
+          <blockquote class="hk__quote">“ANTI-RASO significa mergulhar fundo nas coisas. É se recusar a viver apenas na superfície.”<cite>— Duda Maiolini, voz &amp; letras</cite></blockquote>
+          <p class="hk__listen"><button type="button" class="hk-btn" data-play="0">▶ ouvir ANTI-RASO no HORNEY AMP</button> <a href="https://open.spotify.com/artist/5zJVmieIGGEeOKbIrXmhZi" target="_blank" rel="noopener">♫ Artista no Spotify ↗</a></p>
+        </section>
+
+        <section class="hk-box" id="hk-recados" aria-labelledby="hk-rec-h">
+          <h3 class="hk__h2" id="hk-rec-h">recados de HORNEY (<span class="js-count-mural">…</span>)</h3>
+          <div class="board" data-channel="mural" data-noun="recado">
+            <form class="board__form">
+              <label class="board__label" for="hk-scrap">deixe um recado como <b class="js-nick">visitante</b>:</label>
+              <textarea class="board__text" id="hk-scrap" rows="3" maxlength="500" placeholder="escreve aqui… (vai pro mural compartilhado da HORNEY)"></textarea>
+              <div class="board__row"><button type="submit" class="hk-btn">enviar recado</button><span class="board__msg" role="status" aria-live="polite"></span></div>
+            </form>
+            <ol class="board__list"></ol>
+            <button type="button" class="board__more lnk" hidden>ver recados mais antigos</button>
+          </div>
+        </section>
+
+        <section class="hk-box" id="hk-depo" aria-labelledby="hk-depo-h">
+          <h3 class="hk__h2" id="hk-depo-h">depoimentos (<span class="js-count-depoimento">…</span>)</h3>
+          <div class="board" data-channel="depoimento" data-noun="depoimento">
+            <form class="board__form">
+              <label class="board__label" for="hk-depo-text">escrever um depoimento sobre a HORNEY como <b class="js-nick">visitante</b>:</label>
+              <textarea class="board__text" id="hk-depo-text" rows="3" maxlength="500" placeholder="o que a HORNEY é pra você?"></textarea>
+              <div class="board__row"><button type="submit" class="hk-btn">enviar depoimento</button><span class="board__msg" role="status" aria-live="polite"></span></div>
+              <p class="board__note">aqui não precisa esperar aprovação: a HORNEY confia em você.</p>
+            </form>
+            <ol class="board__list board__list--depo"></ol>
+            <button type="button" class="board__more lnk" hidden>ver depoimentos mais antigos</button>
+          </div>
+        </section>
+      </div>
+      <aside class="hk__right">
+        <section class="hk-box" aria-labelledby="hk-friends-h">
+          <h3 class="hk__h2" id="hk-friends-h">amigos (8)</h3>
+          <ul class="hk-friends">
+            <li><span class="hk-friends__pic" aria-hidden="true">🎤</span><b>Duda</b><small>voz &amp; letras</small></li>
+            <li><span class="hk-friends__pic" aria-hidden="true">✍️</span><b>Rafa Bello</b><small>composição</small></li>
+            <li><span class="hk-friends__pic" aria-hidden="true">🧩</span><b>Dani Buarque</b><small>feat. em QUEBRA-CABEÇA</small></li>
+            <li><span class="hk-friends__pic" aria-hidden="true">🎸</span><b>Mastrobiso</b><small>dividiu o palco no Rock Night</small></li>
+            <li><a href="https://www.unglued.com.br/reviews/anti-raso" target="_blank" rel="noopener"><span class="hk-friends__pic hk-friends__pic--txt" aria-hidden="true">7.8</span><b>Unglued</b><small>deu 7.8/10 pro ANTI-RASO ↗</small></a></li>
+            <li><button type="button" data-url="www.horney.band/shows"><span class="hk-friends__pic" aria-hidden="true">🏚️</span><b>FFFront</b><small>casa do Rock Night em SP</small></button></li>
+            <li><span class="hk-friends__pic" aria-hidden="true">🌁</span><b>Joinville</b><small>hometown · Santa Catarina</small></li>
+            <li class="hk-friends__you"><span class="hk-friends__pic" aria-hidden="true">◎</span><b class="js-nick">visitante</b><small>você (o 8º amigo)</small></li>
+          </ul>
+        </section>
+        <section class="hk-box" id="hk-comus" aria-labelledby="hk-comus-h">
+          <h3 class="hk__h2" id="hk-comus-h">comunidades (7)</h3>
+          <ul class="hk-comus">
+            <li><button type="button" data-url="www.horney.band/shows"><img src="../assets/sympla-rock-night.jpg" alt="" width="1179" height="662" loading="lazy" /><span>Eu fui no Rock Night @ FFFront</span></button></li>
+            <li><button type="button" data-url="www.fotolog.com.br/horney"><img src="../assets/ig-post-5.jpg" alt="" width="640" height="639" loading="lazy" /><span>Fotolog da HORNEY</span></button></li>
+            <li><button type="button" data-url="www.youtube.com/horney"><img src="../assets/yt-fools-game.jpg" alt="" width="1280" height="720" loading="lazy" /><span>Eu já vi Fool's Game</span></button></li>
+            <li><button type="button" data-url="www.mercadolivre.com.br/horney-merch"><img src="../assets/eye-sun.png" alt="" width="300" height="300" loading="lazy" /><span>Quero o merch EM BREVE</span></button></li>
+            <li><button type="button" data-chat="olho"><img src="../assets/eye.png" alt="" width="1024" height="1024" loading="lazy" /><span>Eu pergunto pro Olho ◎</span></button></li>
+            <li><button type="button" data-play="0"><img src="../assets/cover-anti-raso.jpg" alt="" width="640" height="640" loading="lazy" /><span>Ouvi ANTI-RASO sem pular faixa</span></button></li>
+            <li><button type="button" data-open="win-emula"><img src="../assets/cover-four-rooms.jpg" alt="" width="640" height="640" loading="lazy" /><span>Baixei no eMula (e abri no Spotify)</span></button></li>
+          </ul>
+        </section>
+      </aside>
+    </div>
+    <footer class="hk__foot">© 2006 horkut · uma homenagem (não oficial) à internet de antigamente · HORNEY, Joinville SC</footer>
+  </div>
+</template>
+
+<!-- www.horney.band/shows -->
+<template id="tpl-shows">
+  <div class="hb">
+    <header class="hb__head">
+      <img class="hb__logo" src="../assets/logo-wordmark.png" alt="HORNEY" width="1200" height="519" />
+      <p class="hb__tag">site oficial · melhor visualizado em 800x600 no Internet Explorer 6</p>
+      <nav class="hb__nav" aria-label="horney.band">
+        <button type="button" class="hb__navb" aria-current="page" data-url="www.horney.band/shows">SHOWS</button>
+        <button type="button" class="hb__navb" data-url="www.horkut.com.br/horney">HORKUT</button>
+        <button type="button" class="hb__navb" data-url="www.fotolog.com.br/horney">FOTOLOG</button>
+        <button type="button" class="hb__navb" data-url="www.youtube.com/horney">VÍDEOS</button>
+        <button type="button" class="hb__navb" data-url="www.mercadolivre.com.br/horney-merch">MERCH</button>
+      </nav>
+    </header>
+    <section class="hb__next" aria-labelledby="hb-next-h">
+      <h3 class="hb__h" id="hb-next-h">PRÓXIMO SHOW</h3>
+      <div class="js-next"></div>
+    </section>
+    <section aria-labelledby="hb-list-h">
+      <h3 class="hb__h" id="hb-list-h">AGENDA 2026</h3>
+      <ol class="hb__list js-shows"></ol>
+    </section>
+    <figure class="hb__flyer">
+      <img src="../assets/sympla-rock-night.jpg" alt="Flyer do Rock Night na FFFront, São Paulo, com HORNEY e Mastrobiso" width="1179" height="662" loading="lazy" />
+      <figcaption>Qui, 17/09/2026, FFFront, São Paulo: HORNEY + Mastrobiso no mesmo flyer — e que flyer.</figcaption>
+    </figure>
+    <p class="hb__cta">Não viu sua cidade? Chama a gente — <a href="https://ig.me/m/horney.band" target="_blank" rel="noopener">DM no Instagram</a>. Datas novas saem primeiro lá.</p>
+    <p class="hb__shout">SAI DE CASA E COLE NOS SHOWS!!! ⚡️😈</p>
+    <p class="hb__foot">© 2026 HORNEY · Joinville / SC · <button type="button" class="lnk" data-chat="olho">pergunta pro Olho se vai ter show ◎</button></p>
+  </div>
+</template>
+
+<!-- www.fotolog.com.br/horney -->
+<template id="tpl-fotolog">
+  <div class="fl">
+    <header class="fl__head"><span class="fl__logo">fotolog</span><span class="fl__user">.com.br/<b>horney</b></span></header>
+    <div class="fl__grid">
+      <div class="fl__main">
+        <figure class="fl__fig">
+          <img class="js-photo" alt="" width="640" height="640" />
+          <figcaption class="js-cap"></figcaption>
+        </figure>
+        <div class="fl__nav">
+          <button type="button" class="fl__btn js-prev">« foto anterior</button>
+          <span class="fl__count js-count" aria-live="polite"></span>
+          <button type="button" class="fl__btn js-next">próxima foto »</button>
+        </div>
+        <section class="fl__gb" aria-labelledby="fl-gb-h">
+          <h3 class="fl__h" id="fl-gb-h">livro de visitas (<span class="js-count-foto">…</span>)</h3>
+          <div class="board" data-channel="foto" data-noun="comentário">
+            <form class="board__form">
+              <label class="board__label" for="fl-gb-text">assinar o livro de visitas como <b class="js-nick">visitante</b>:</label>
+              <textarea class="board__text" id="fl-gb-text" rows="3" maxlength="500" placeholder="flw, add aí! :)"></textarea>
+              <div class="board__row"><button type="submit" class="fl__btn fl__btn--go">assinar</button><span class="board__msg" role="status" aria-live="polite"></span></div>
+              <p class="board__note">vagas no livro de visitas: ilimitadas (aqui não precisa ser Gold Camera).</p>
+            </form>
+            <ol class="board__list board__list--fl"></ol>
+            <button type="button" class="board__more lnk" hidden>ver comentários mais antigos</button>
+          </div>
+        </section>
+      </div>
+      <aside class="fl__side">
+        <div class="fl__me"><img src="../assets/eye-sun.png" alt="" width="300" height="300" loading="lazy" /><p><b>horney</b><small>Joinville (SC) · Brasil</small></p></div>
+        <p class="fl__bio">alt/indie rock. fotos de show, de flyer e da galera que cola. ⚡😈</p>
+        <p class="fl__h">todas as fotos</p>
+        <ul class="fl__thumbs js-thumbs"></ul>
+        <p class="fl__h">amigos/favoritos</p>
+        <ul class="fl__favs">
+          <li><button type="button" class="lnk" data-url="www.horkut.com.br/horney">horkut/horney</button></li>
+          <li><a href="https://www.instagram.com/horney.band/" target="_blank" rel="noopener">@horney.band ↗</a></li>
+        </ul>
+      </aside>
+    </div>
+  </div>
+</template>
+
+<!-- www.youtube.com/horney -->
+<template id="tpl-youtube">
+  <div class="yt">
+    <header class="yt__head">
+      <span class="yt__logo">You<b>Tube</b></span>
+      <span class="yt__tm">Broadcast Yourself™</span>
+      <form class="yt__search js-search" role="search">
+        <input class="js-q" type="search" aria-label="Pesquisar vídeos da HORNEY" placeholder="pesquisar vídeos" />
+        <button type="submit">Pesquisar</button>
+      </form>
+    </header>
+    <p class="yt__crumb">Canal: <b>bandaHorney</b> · <a href="https://www.youtube.com/@bandaHorney" target="_blank" rel="noopener">canal @bandaHorney ↗</a></p>
+    <div class="yt__grid">
+      <div class="yt__main">
+        <div class="yt__player js-player"></div>
+        <h3 class="yt__title js-title"></h3>
+        <p class="yt__meta js-meta"></p>
+      </div>
+      <aside class="yt__side">
+        <h4 class="yt__sh">Vídeos de bandaHorney (2)</h4>
+        <p class="yt__res js-res" aria-live="polite"></p>
+        <ul class="yt__list js-list"></ul>
+      </aside>
+    </div>
+  </div>
+</template>
+
+<!-- www.mercadolivre.com.br/horney-merch -->
+<template id="tpl-ml">
+  <div class="ml">
+    <header class="ml__head"><span class="ml__logo">mercado<b>livre</b></span><span class="ml__slogan">o maior site de compra e venda do Brasil (versão lan house)</span></header>
+    <p class="ml__crumb">Você está em: Música › Bandas › HORNEY › merch</p>
+    <p class="ml__banner"><b>EM BREVE</b> — nada à venda ainda. Quer garantir o teu? Manda DM que a gente avisa primeiro.</p>
+    <ul class="ml__list">
+      <li class="ml__item">
+        <svg class="ml__art" viewBox="0 0 100 100" role="img" aria-label="Camiseta preta com a arte do ANTI-RASO estampada no peito">
+          <rect width="100" height="100" fill="#f4f1e8"/>
+          <path d="M31 12 42 7q8 7 16 0l11 5 19 13-8 16-9-4.5V92H29V36.5L20 41l-8-16z" fill="#141414"/>
+          <image href="../assets/cover-anti-raso.jpg" x="37" y="30" width="26" height="26"/>
+        </svg>
+        <div class="ml__info">
+          <h3 class="ml__title">Camiseta ANTI-RASO</h3>
+          <p class="ml__desc">Preta, com a capa do EP no peito: a porta no mar, o olho e o raio.</p>
+          <p class="ml__seller">vendedor: HORNEY · Joinville (SC) · 0 em estoque (ainda!)</p>
+        </div>
+        <div class="ml__buy"><p class="ml__price">EM BREVE</p><p class="ml__noprice">sem preço ainda</p><a class="ml__btn" href="https://ig.me/m/horney.band" target="_blank" rel="noopener">Quero! manda DM ↗</a></div>
+      </li>
+      <li class="ml__item">
+        <svg class="ml__art" viewBox="0 0 100 100" role="img" aria-label="Camiseta amarela com o olho-sol da HORNEY em preto">
+          <rect width="100" height="100" fill="#f4f1e8"/>
+          <path d="M31 12 42 7q8 7 16 0l11 5 19 13-8 16-9-4.5V92H29V36.5L20 41l-8-16z" fill="#f2a900"/>
+          <path d="M42 7q8 7 16 0" fill="none" stroke="#c98c00" stroke-width="2.5"/>
+          <image href="../assets/eye-tight.png" x="36" y="30" width="28" height="25.5"/>
+        </svg>
+        <div class="ml__info">
+          <h3 class="ml__title">Camiseta OLHO</h3>
+          <p class="ml__desc">Amarela HORNEY com o olho-sol do logo em preto. Pra ser visto de longe na grade.</p>
+          <p class="ml__seller">vendedor: HORNEY · Joinville (SC) · 0 em estoque (ainda!)</p>
+        </div>
+        <div class="ml__buy"><p class="ml__price">EM BREVE</p><p class="ml__noprice">sem preço ainda</p><a class="ml__btn" href="https://ig.me/m/horney.band" target="_blank" rel="noopener">Quero! manda DM ↗</a></div>
+      </li>
+      <li class="ml__item">
+        <svg class="ml__art" viewBox="0 0 100 100" role="img" aria-label="Ecobag de algodão cru com o logo HORNEY em amarelo">
+          <rect width="100" height="100" fill="#f4f1e8"/>
+          <path d="M37 38V25q0-12 13-12t13 12v13" fill="none" stroke="#bfb196" stroke-width="4"/>
+          <path d="M22 36h56l4 56H18z" fill="#e6dcc4" stroke="#bfb196" stroke-width="1.5"/>
+          <image href="../assets/logo-wordmark.png" x="26" y="52" width="48" height="20.8"/>
+        </svg>
+        <div class="ml__info">
+          <h3 class="ml__title">Ecobag H◎RNEY</h3>
+          <p class="ml__desc">Algodão cru com o logo amarelo. Cabe o merch, o casaco e a água do show.</p>
+          <p class="ml__seller">vendedor: HORNEY · Joinville (SC) · 0 em estoque (ainda!)</p>
+        </div>
+        <div class="ml__buy"><p class="ml__price">EM BREVE</p><p class="ml__noprice">sem preço ainda</p><a class="ml__btn" href="https://ig.me/m/horney.band" target="_blank" rel="noopener">Quero! manda DM ↗</a></div>
+      </li>
+      <li class="ml__item">
+        <svg class="ml__art" viewBox="0 0 100 100" role="img" aria-label="Kit de adesivos: olho, capa de ANTI-RASO e logo">
+          <rect width="100" height="100" fill="#f4f1e8"/>
+          <circle cx="33" cy="33" r="22" fill="#fff" stroke="#d9d2bf"/>
+          <image href="../assets/eye-sun.png" x="13" y="13" width="40" height="40"/>
+          <g transform="rotate(8 70 40)"><rect x="52" y="20" width="38" height="38" rx="4" fill="#fff" stroke="#d9d2bf"/><image href="../assets/cover-anti-raso.jpg" x="55" y="23" width="32" height="32"/></g>
+          <g transform="rotate(-8 50 78)"><rect x="18" y="63" width="64" height="30" rx="7" fill="#fff" stroke="#d9d2bf"/><image href="../assets/logo-wordmark.png" x="23" y="66" width="54" height="23.4"/></g>
+        </svg>
+        <div class="ml__info">
+          <h3 class="ml__title">Kit de adesivos</h3>
+          <p class="ml__desc">Olho, capa de ANTI-RASO e logo — pra colar no case, no skate, no capacete.</p>
+          <p class="ml__seller">vendedor: HORNEY · Joinville (SC) · 0 em estoque (ainda!)</p>
+        </div>
+        <div class="ml__buy"><p class="ml__price">EM BREVE</p><p class="ml__noprice">sem preço ainda</p><a class="ml__btn" href="https://ig.me/m/horney.band" target="_blank" rel="noopener">Quero! manda DM ↗</a></div>
+      </li>
+    </ul>
+    <p class="ml__foot">4 objeto(s) · 0 em estoque (ainda!) · nada de carrinho, nada de checkout · <a href="https://www.instagram.com/horney.band/" target="_blank" rel="noopener">ou segue o @horney.band ↗</a></p>
+  </div>
+</template>
+
+<!-- Página não encontrada -->
+<template id="tpl-404">
+  <div class="e404">
+    <div class="e404__head"><svg aria-hidden="true"><use href="#i-ie"/></svg><h3>A página não pode ser exibida</h3></div>
+    <p>A página que você está procurando não está disponível no momento. O site pode estar enfrentando dificuldades técnicas, ou talvez o cabo de rede da Máquina 07 tenha sido emprestado pra máquina 03.</p>
+    <p class="e404__addr">Endereço: <code class="js-addr"></code></p>
+    <hr />
+    <p><b>Tente o seguinte:</b></p>
+    <ul>
+      <li>Clique no botão <button type="button" class="lnk js-back">Voltar</button> para tentar outro link.</li>
+      <li>Abra um dos sites que funcionam nesta lan house:
+        <ul>
+          <li><button type="button" class="lnk" data-url="www.horkut.com.br/horney">www.horkut.com.br/horney</button></li>
+          <li><button type="button" class="lnk" data-url="www.horney.band/shows">www.horney.band/shows</button></li>
+          <li><button type="button" class="lnk" data-url="www.fotolog.com.br/horney">www.fotolog.com.br/horney</button></li>
+          <li><button type="button" class="lnk" data-url="www.youtube.com/horney">www.youtube.com/horney</button></li>
+          <li><button type="button" class="lnk" data-url="www.mercadolivre.com.br/horney-merch">www.mercadolivre.com.br/horney-merch</button></li>
+        </ul>
+      </li>
+      <li>Ou pergunte pro atendente. Ele vai dizer “reinicia”. <button type="button" class="lnk" data-chat="olho">Melhor perguntar pro Olho ◎</button></li>
+    </ul>
+    <p class="e404__code">Não é possível localizar o servidor ou erro de DNS<br />Internet Explorer</p>
+  </div>
+</template>
+</body>
+</html>

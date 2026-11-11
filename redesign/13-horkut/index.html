@@ -1,0 +1,185 @@
+<!--
+  HORNEY — CONCEPT 13 · HORKUT (o Orkut da HORNEY)
+  ================================================
+  Rationale:
+  Duda and Rafa asked for "um Orkut ao invés de MySpace, pra enfatizar a ideia de libertar o Brasil
+  das amarras das empresas sociais gringas", and for the Eye to become "meio que um oráculo, com
+  interação real pros fãs deixarem mensagens ou perguntarem alguma coisa". So the band's whole site
+  is a working Orkut clone, "horkut — a rede social que não te vende. 100% nacional, sem algoritmo,
+  sem anúncio." Every Orkut ritual is a real feature: recados go to the shared fan wall, depoimentos
+  wait for HORNEY's approval, comunidades hold the release, the shows, the merch and a city poll that
+  actually counts votes, and the profile photo is the Eye itself, which follows your cursor
+  everywhere and answers questions in the "Oráculo do Olho" app. It goes past round 1's MySpace page
+  (a single long profile) into a multi-view product the fans can live in.
+
+  Techniques:
+  - Hash-routed SPA (#/perfil, #/recados/2, #/comunidade/anti-raso, #/foto/flyer, #/oraculo …):
+    deep links, back/forward, focus moved to each view's h1, document.title per route, 404 route
+    ("bad, bad server. no donut for you").
+  - Shared fan wall via ../assets/oraculo.js: Horney.mural.list/post/subscribe on channels mural,
+    depoimento, oraculo and foto; optimistic insert; pagination; live updates; Horney.oraculo.ask and
+    .sorte. Every fan string goes through textContent/DOM nodes only.
+  - The Eye: one vector SVG component (sun disc, spikes, almond, iris, lids) mounted at several sizes.
+    A single event-driven rAF loop moves only SVG transforms, writes only on change, settles and
+    stops, skips offscreen eyes (IntersectionObserver), pauses on hidden tabs; blinks are short CSS
+    transform transitions; pupil dilates while the fan types.
+  - Two themes (clássico Orkut baby-blue / HORNEY black-yellow-magenta) as CSS custom properties,
+    applied pre-paint by an inline script, persisted under horney:horkut:theme.
+  - Local state (nome, karma, comunidades, RSVP, enquetes, amizade, depoimentos pendentes, última
+    visita) under the horney:horkut: prefix, all wrapped in try/catch.
+  - Click-to-load YouTube and Spotify facades (ANTI-RASO album embed at 420px), lazy images with
+    real pixel sizes, ARIA tabs, aria-live toasts, reduced-motion mode, bottom tab bar on phones.
+-->
+<!doctype html>
+<html lang="pt-BR" data-theme="classico">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HORNEY no horkut · perfil, recados e o Oráculo do Olho</title>
+  <meta name="description" content="HORNEY: alt/indie rock de Joinville (SC) num Orkut feito em casa. Deixe recado, escreva depoimento, entre nas comunidades e pergunte ao Oráculo do Olho. EP ANTI-RASO fora agora.">
+  <meta name="theme-color" content="#bfd0ea">
+  <link rel="icon" href="../assets/eye.png">
+  <script>
+    (function () {
+      try {
+        var t = JSON.parse(localStorage.getItem('horney:horkut:theme'));
+        if (t === 'horney' || t === 'classico') {
+          document.documentElement.setAttribute('data-theme', t);
+          if (t === 'horney') document.querySelector('meta[name="theme-color"]').setAttribute('content', '#050505');
+        }
+      } catch (e) {}
+    })();
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Comfortaa:wght@700&display=swap">
+  <link rel="stylesheet" href="style.css">
+  <script src="../assets/oraculo.js" defer></script>
+  <script src="script.js" defer></script>
+</head>
+<body data-route="inicio">
+  <a class="skip" href="#main" id="skip-link">pular pro conteúdo</a>
+  <a class="all-concepts" href="../index.html">← todos os conceitos</a>
+
+  <header class="topbar">
+    <div class="topbar__in">
+      <a class="logo" href="#/" aria-label="horkut — início">h<img class="logo__o" src="../assets/eye-sun.png" alt="" width="300" height="300">rkut</a>
+      <nav class="topnav" aria-label="Navegação principal">
+        <ul>
+          <li><a href="#/" data-nav="inicio">Início</a></li>
+          <li><a href="#/perfil" data-nav="perfil">Perfil</a></li>
+          <li><a href="#/recados" data-nav="recados">Recados<span class="badge" id="badge-recados" hidden></span></a></li>
+          <li><a href="#/amigos" data-nav="amigos">Amigos</a></li>
+          <li><a href="#/comunidades" data-nav="comunidades">Comunidades</a></li>
+        </ul>
+      </nav>
+      <form class="search" id="search-form" role="search">
+        <label class="sr-only" for="search-q">pesquisar no horkut</label>
+        <input class="search__in" id="search-q" type="search" placeholder="pesquisar no horkut" autocomplete="off">
+        <button class="search__btn" type="submit">pesquisar</button>
+      </form>
+      <div class="topbar__me" id="me-box"><a href="#/entrar">entrar</a></div>
+      <div class="theme" role="group" aria-label="Tema do horkut">
+        <button type="button" class="theme__btn" data-theme-btn="classico" aria-pressed="true">clássico</button>
+        <button type="button" class="theme__btn" data-theme-btn="horney" aria-pressed="false">HORNEY</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="shell">
+    <aside class="col-left" aria-label="Perfil da HORNEY">
+      <div class="box pfp">
+        <a class="pfp__photo" href="#/oraculo" aria-label="Foto do perfil: o Olho. Abrir o Oráculo do Olho" id="pfp-eye">
+          <img class="pfp__fallback" src="../assets/eye-sun.png" alt="" width="300" height="300">
+        </a>
+        <p class="pfp__name"><a href="#/perfil">HORNEY</a></p>
+        <p class="pfp__meta">alt/indie rock<br>Joinville, SC, Brasil</p>
+        <nav class="leftmenu" aria-label="Menu do perfil">
+          <ul>
+            <li><a href="#/perfil" data-nav="perfil"><span aria-hidden="true">👤</span> perfil</a></li>
+            <li><a href="#/recados" data-nav="recados"><span aria-hidden="true">✉</span> recados <span class="n" id="n-recados"></span></a></li>
+            <li><a href="#/depoimentos" data-nav="depoimentos"><span aria-hidden="true">✍</span> depoimentos <span class="n" id="n-depo"></span></a></li>
+            <li><a href="#/fotos" data-nav="fotos"><span aria-hidden="true">📷</span> fotos <span class="n">(12)</span></a></li>
+            <li><a href="#/videos" data-nav="videos"><span aria-hidden="true">▶</span> vídeos <span class="n">(2)</span></a></li>
+            <li><a href="#/amigos" data-nav="amigos"><span aria-hidden="true">☺</span> amigos <span class="n" id="n-amigos">(8)</span></a></li>
+            <li><a href="#/comunidades" data-nav="comunidades"><span aria-hidden="true">👥</span> comunidades <span class="n">(10)</span></a></li>
+            <li><a href="#/oraculo" data-nav="oraculo"><span aria-hidden="true">◎</span> app: Oráculo do Olho</a></li>
+          </ul>
+        </nav>
+      </div>
+      <section class="box karma-mini" aria-labelledby="karma-mini-t">
+        <div class="box__hd"><h2 class="box__t" id="karma-mini-t">karma</h2></div>
+        <div class="box__bd"><dl class="kmini" id="karma-mini"></dl></div>
+      </section>
+    </aside>
+
+    <main class="col-main" id="main" tabindex="-1">
+      <div id="view" class="view-slot">
+        <noscript>
+          <section class="box nojs">
+            <div class="box__hd"><h1 class="box__t">HORNEY no horkut</h1></div>
+            <div class="box__bd">
+              <p>O horkut precisa de JavaScript pros recados, depoimentos, comunidades e o Oráculo do Olho. O essencial tá aqui:</p>
+              <p>Quarteto de alt/indie rock de <strong>Joinville (SC)</strong>. Punk, hardcore e grunge com respiros de MPB — e, desde 2026, cantando em português.</p>
+              <p>Voz e letras: <strong>Duda Maiolini</strong>. Composição: <strong>Rafa Bello</strong>. +2.</p>
+              <h2>Lançamentos</h2>
+              <ul>
+                <li><a href="https://open.spotify.com/album/7EM81z5ydGQq04ZbkIE5aS">ANTI-RASO</a> — EP · 30.07.2026 · 4 faixas: OFF!, QUEBRA-CABEÇA (feat. Dani Buarque), MERGULHAR, ROMÂNTICA · <a href="https://www.unglued.com.br/reviews/anti-raso">Unglued: 7.8/10</a></li>
+                <li><a href="https://open.spotify.com/album/5jJ1py37M3i7qaZgkOOf4V">MERGULHAR</a> — single · 2026</li>
+                <li><a href="https://open.spotify.com/album/6Cg0ULHHKTsJo7GlEfPKrF">OFF!</a> — single · 13.11.2025</li>
+                <li><a href="https://open.spotify.com/album/3m7dNgjIIiHDuZiNcu8Vhi">Four Rooms for Four Fools</a> — EP · 2022</li>
+              </ul>
+              <h2>Vídeos</h2>
+              <ul>
+                <li><a href="https://www.youtube.com/watch?v=9uP1P11at9M">Fool's Game — clipe oficial (2022), dir. Rique Duarte</a></li>
+                <li><a href="https://www.youtube.com/watch?v=V9Rpgtc2vTs">HORNEY ao vivo · 0:38</a></li>
+              </ul>
+              <h2>Shows</h2>
+              <p>sem shows marcados — cola no Instagram pra saber primeiro. Já rolaram: 17/09/2026 ROCK NIGHT @ FFFront (São Paulo, c/ Mastrobiso), 03/10/2026 e 09/10/2026 (último show do ano).</p>
+              <h2>Merch</h2>
+              <p>EM BREVE — nada à venda ainda. <a href="https://ig.me/m/horney.band">Manda DM no Instagram</a> que a gente avisa primeiro.</p>
+              <h2>Redes</h2>
+              <p><a href="https://www.instagram.com/horney.band/">Instagram @horney.band</a> · <a href="https://www.tiktok.com/@horney.band">TikTok</a> · <a href="https://www.threads.com/@horney.band">Threads</a> · <a href="https://www.youtube.com/@bandaHorney">YouTube @bandaHorney</a> · <a href="https://open.spotify.com/artist/5zJVmieIGGEeOKbIrXmhZi">Spotify</a> · <a href="https://ps.algohits.com/horney-anti-raso">Todas as plataformas</a></p>
+            </div>
+          </section>
+        </noscript>
+      </div>
+    </main>
+
+    <aside class="col-right" aria-label="Amigos e comunidades da HORNEY">
+      <section class="box" aria-labelledby="rt-amigos">
+        <div class="box__hd"><h2 class="box__t" id="rt-amigos"><a href="#/amigos">amigos</a> <span id="rt-amigos-n">(8)</span></h2></div>
+        <div class="box__bd"><ul class="grid9" id="friends-grid"></ul><p class="more"><a href="#/amigos">ver todos</a></p></div>
+      </section>
+      <section class="box" aria-labelledby="rt-comms">
+        <div class="box__hd"><h2 class="box__t" id="rt-comms"><a href="#/comunidades">comunidades</a> (10)</h2></div>
+        <div class="box__bd"><ul class="grid9" id="comms-grid"></ul><p class="more"><a href="#/comunidades">ver todas</a></p></div>
+      </section>
+    </aside>
+  </div>
+
+  <footer class="foot">
+    <p class="foot__links">
+      <a href="#/sobre">sobre o horkut</a> ·
+      <a href="https://www.instagram.com/horney.band/" target="_blank" rel="noopener">Instagram</a> ·
+      <a href="https://www.tiktok.com/@horney.band" target="_blank" rel="noopener">TikTok</a> ·
+      <a href="https://www.threads.com/@horney.band" target="_blank" rel="noopener">Threads</a> ·
+      <a href="https://www.youtube.com/@bandaHorney" target="_blank" rel="noopener">YouTube</a> ·
+      <a href="https://open.spotify.com/artist/5zJVmieIGGEeOKbIrXmhZi" target="_blank" rel="noopener">Spotify</a> ·
+      <a href="https://ig.me/m/horney.band" target="_blank" rel="noopener">DM</a>
+    </p>
+    <p class="foot__line">horkut — a rede social que não te vende. 100% nacional, sem algoritmo, sem anúncio.</p>
+    <p>© 2026 horkut · feito em Joinville · nenhum dado seu saiu do Brasil</p>
+  </footer>
+
+  <nav class="tabbar" aria-label="Atalhos">
+    <a href="#/perfil" data-nav="perfil"><span class="tabbar__i" aria-hidden="true">👤</span>Perfil</a>
+    <a href="#/recados" data-nav="recados"><span class="tabbar__i" aria-hidden="true">✉</span>Recados</a>
+    <a href="#/comunidades" data-nav="comunidades"><span class="tabbar__i" aria-hidden="true">👥</span>Comunidades</a>
+    <a href="#/oraculo" data-nav="oraculo"><span class="tabbar__i" aria-hidden="true">◎</span>Olho</a>
+    <a href="#/mais" data-nav="mais" data-nav-more><span class="tabbar__i" aria-hidden="true">⋯</span>Mais</a>
+  </nav>
+
+  <div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+</body>
+</html>
